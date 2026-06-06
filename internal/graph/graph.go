@@ -1,0 +1,452 @@
+package graph
+
+import (
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
+	"unicode"
+)
+
+type NodeID string
+
+type Node struct {
+	ID   NodeID
+	Text string
+}
+
+type Graph struct {
+	nodes   map[NodeID]Node
+	order   []NodeID
+	parents map[NodeID]map[NodeID]struct{}
+}
+
+type Stats struct {
+	Nodes int
+	Edges int
+	Roots int
+}
+
+var (
+	ErrEmptyNodeID   = errors.New("empty node id")
+	ErrEmptyNodeText = errors.New("empty node text")
+	ErrDuplicateNode = errors.New("duplicate node id")
+	ErrUnknownNode   = errors.New("unknown node")
+	ErrDuplicateEdge = errors.New("duplicate edge")
+	ErrSelfEdge      = errors.New("self edge")
+	ErrCycle         = errors.New("cycle")
+)
+
+func New() *Graph {
+	return &Graph{
+		nodes:   make(map[NodeID]Node),
+		parents: make(map[NodeID]map[NodeID]struct{}),
+	}
+}
+
+func (g *Graph) Clone() *Graph {
+	next := New()
+	for _, id := range g.order {
+		n := g.nodes[id]
+		next.nodes[id] = n
+		next.order = append(next.order, id)
+		next.parents[id] = make(map[NodeID]struct{}, len(g.parents[id]))
+		for parent := range g.parents[id] {
+			next.parents[id][parent] = struct{}{}
+		}
+	}
+	return next
+}
+
+func (g *Graph) Nodes() []Node {
+	nodes := make([]Node, 0, len(g.order))
+	for _, id := range g.order {
+		nodes = append(nodes, g.nodes[id])
+	}
+	return nodes
+}
+
+func (g *Graph) Order() []NodeID {
+	return append([]NodeID(nil), g.order...)
+}
+
+func (g *Graph) HasNode(id NodeID) bool {
+	_, ok := g.nodes[id]
+	return ok
+}
+
+func (g *Graph) Node(id NodeID) (Node, bool) {
+	n, ok := g.nodes[id]
+	return n, ok
+}
+
+func (g *Graph) AddNode(text string) (NodeID, error) {
+	text = strings.TrimSpace(text)
+	id := g.UniqueID(text)
+	return id, g.AddNodeWithID(id, text)
+}
+
+func (g *Graph) AddNodeWithID(id NodeID, text string) error {
+	id, text = cleanID(id), strings.TrimSpace(text)
+	if id == "" {
+		return ErrEmptyNodeID
+	}
+	if !ValidID(id) {
+		return fmt.Errorf("invalid node id %q", id)
+	}
+	if text == "" {
+		return ErrEmptyNodeText
+	}
+	if _, exists := g.nodes[id]; exists {
+		return ErrDuplicateNode
+	}
+	g.nodes[id] = Node{ID: id, Text: text}
+	g.order = append(g.order, id)
+	g.parents[id] = make(map[NodeID]struct{})
+	return nil
+}
+
+func (g *Graph) RenameNode(id NodeID, newText string) error {
+	id, newText = cleanID(id), strings.TrimSpace(newText)
+	if newText == "" {
+		return ErrEmptyNodeText
+	}
+	node, ok := g.nodes[id]
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrUnknownNode, id)
+	}
+	node.Text = newText
+	g.nodes[id] = node
+	return nil
+}
+
+func (g *Graph) DeleteNode(id NodeID) error {
+	id = cleanID(id)
+	if !g.HasNode(id) {
+		return fmt.Errorf("%w: %s", ErrUnknownNode, id)
+	}
+	delete(g.nodes, id)
+	delete(g.parents, id)
+	for child := range g.parents {
+		delete(g.parents[child], id)
+	}
+	for i, existing := range g.order {
+		if existing == id {
+			g.order = append(g.order[:i], g.order[i+1:]...)
+			break
+		}
+	}
+	return nil
+}
+
+func (g *Graph) AddEdge(parent, child NodeID) error {
+	parent, child = cleanID(parent), cleanID(child)
+	if parent == child {
+		return ErrSelfEdge
+	}
+	if !g.HasNode(parent) {
+		return fmt.Errorf("%w: %s", ErrUnknownNode, parent)
+	}
+	if !g.HasNode(child) {
+		return fmt.Errorf("%w: %s", ErrUnknownNode, child)
+	}
+	if _, exists := g.parents[child][parent]; exists {
+		return ErrDuplicateEdge
+	}
+	if path, found := g.Path(child, parent); found {
+		return CycleError{Path: append([]NodeID{parent}, path...)}
+	}
+	g.parents[child][parent] = struct{}{}
+	return nil
+}
+
+func (g *Graph) RemoveEdge(parent, child NodeID) error {
+	parent, child = cleanID(parent), cleanID(child)
+	if !g.HasNode(parent) {
+		return fmt.Errorf("%w: %s", ErrUnknownNode, parent)
+	}
+	if !g.HasNode(child) {
+		return fmt.Errorf("%w: %s", ErrUnknownNode, child)
+	}
+	if _, exists := g.parents[child][parent]; !exists {
+		return fmt.Errorf("edge %s -> %s does not exist", parent, child)
+	}
+	delete(g.parents[child], parent)
+	return nil
+}
+
+func (g *Graph) ParentsOf(id NodeID) ([]NodeID, error) {
+	id = cleanID(id)
+	if !g.HasNode(id) {
+		return nil, fmt.Errorf("%w: %s", ErrUnknownNode, id)
+	}
+	return g.sortedIDs(g.parents[id]), nil
+}
+
+func (g *Graph) ChildrenOf(id NodeID) ([]NodeID, error) {
+	id = cleanID(id)
+	if !g.HasNode(id) {
+		return nil, fmt.Errorf("%w: %s", ErrUnknownNode, id)
+	}
+	children := make(map[NodeID]struct{})
+	for child, parents := range g.parents {
+		if _, ok := parents[id]; ok {
+			children[child] = struct{}{}
+		}
+	}
+	return g.sortedIDs(children), nil
+}
+
+func (g *Graph) Roots() []NodeID {
+	roots := make([]NodeID, 0)
+	for _, id := range g.order {
+		if len(g.parents[id]) == 0 {
+			roots = append(roots, id)
+		}
+	}
+	return roots
+}
+
+func (g *Graph) MoveEarlier(id NodeID) bool {
+	return g.move(id, -1)
+}
+
+func (g *Graph) MoveLater(id NodeID) bool {
+	return g.move(id, 1)
+}
+
+func (g *Graph) MoveTo(id NodeID, index int) bool {
+	id = cleanID(id)
+	from := g.indexOf(id)
+	if from < 0 {
+		return false
+	}
+	if index < 0 {
+		index = 0
+	}
+	if index >= len(g.order) {
+		index = len(g.order) - 1
+	}
+	if from == index {
+		return false
+	}
+	g.order = append(g.order[:from], g.order[from+1:]...)
+	g.order = append(g.order[:index], append([]NodeID{id}, g.order[index:]...)...)
+	return true
+}
+
+func (g *Graph) Stats() Stats {
+	edges := 0
+	for _, parents := range g.parents {
+		edges += len(parents)
+	}
+	return Stats{Nodes: len(g.nodes), Edges: edges, Roots: len(g.Roots())}
+}
+
+func (g *Graph) Validate() error {
+	for _, id := range g.order {
+		if !ValidID(id) {
+			return fmt.Errorf("invalid node id %q", id)
+		}
+		node := g.nodes[id]
+		if strings.TrimSpace(node.Text) == "" {
+			return fmt.Errorf("%w: %s", ErrEmptyNodeText, id)
+		}
+		for parent := range g.parents[id] {
+			if parent == id {
+				return ErrSelfEdge
+			}
+			if !g.HasNode(parent) {
+				return fmt.Errorf("%w: %s", ErrUnknownNode, parent)
+			}
+		}
+	}
+	if cycle, found := g.findCycle(); found {
+		return CycleError{Path: cycle}
+	}
+	return nil
+}
+
+func (g *Graph) Path(from, to NodeID) ([]NodeID, bool) {
+	from, to = cleanID(from), cleanID(to)
+	if !g.HasNode(from) || !g.HasNode(to) {
+		return nil, false
+	}
+	visited := map[NodeID]bool{}
+	var walk func(NodeID, []NodeID) ([]NodeID, bool)
+	walk = func(current NodeID, path []NodeID) ([]NodeID, bool) {
+		if current == to {
+			return append(path, current), true
+		}
+		if visited[current] {
+			return nil, false
+		}
+		visited[current] = true
+		children, _ := g.ChildrenOf(current)
+		for _, child := range children {
+			if foundPath, ok := walk(child, append(path, current)); ok {
+				return foundPath, true
+			}
+		}
+		return nil, false
+	}
+	return walk(from, nil)
+}
+
+func (g *Graph) UniqueID(text string) NodeID {
+	base := Slugify(text)
+	if base == "" {
+		base = "node"
+	}
+	id := NodeID(base)
+	if !g.HasNode(id) {
+		return id
+	}
+	for i := 2; ; i++ {
+		candidate := NodeID(fmt.Sprintf("%s-%d", base, i))
+		if !g.HasNode(candidate) {
+			return candidate
+		}
+	}
+}
+
+func Slugify(text string) string {
+	text = strings.ToLower(strings.TrimSpace(text))
+	var b strings.Builder
+	lastDash := false
+	for _, r := range text {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			continue
+		}
+		if !lastDash && b.Len() > 0 {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
+
+func ValidID(id NodeID) bool {
+	if id == "" {
+		return false
+	}
+	for i, r := range string(id) {
+		valid := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_'
+		if !valid {
+			return false
+		}
+		if i == 0 && (r == '-' || r == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+type CycleError struct {
+	Path []NodeID
+}
+
+func (e CycleError) Error() string {
+	if len(e.Path) == 0 {
+		return ErrCycle.Error()
+	}
+	parts := make([]string, 0, len(e.Path))
+	for _, id := range e.Path {
+		parts = append(parts, string(id))
+	}
+	return fmt.Sprintf("%s: %s", ErrCycle, strings.Join(parts, " -> "))
+}
+
+func (e CycleError) Is(target error) bool {
+	return target == ErrCycle
+}
+
+func (g *Graph) sortedIDs(set map[NodeID]struct{}) []NodeID {
+	pos := make(map[NodeID]int, len(g.order))
+	for i, id := range g.order {
+		pos[id] = i
+	}
+	ids := make([]NodeID, 0, len(set))
+	for id := range set {
+		ids = append(ids, id)
+	}
+	sort.SliceStable(ids, func(i, j int) bool {
+		return pos[ids[i]] < pos[ids[j]]
+	})
+	return ids
+}
+
+func (g *Graph) move(id NodeID, delta int) bool {
+	id = cleanID(id)
+	i := g.indexOf(id)
+	if i < 0 {
+		return false
+	}
+	j := i + delta
+	if j < 0 || j >= len(g.order) {
+		return false
+	}
+	g.order[i], g.order[j] = g.order[j], g.order[i]
+	return true
+}
+
+func (g *Graph) indexOf(id NodeID) int {
+	for i, existing := range g.order {
+		if existing == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func (g *Graph) findCycle() ([]NodeID, bool) {
+	const (
+		unseen = iota
+		visiting
+		done
+	)
+	state := make(map[NodeID]int, len(g.nodes))
+	stack := make([]NodeID, 0, len(g.nodes))
+	var walk func(NodeID) ([]NodeID, bool)
+	walk = func(id NodeID) ([]NodeID, bool) {
+		state[id] = visiting
+		stack = append(stack, id)
+		children, _ := g.ChildrenOf(id)
+		for _, child := range children {
+			switch state[child] {
+			case unseen:
+				if cycle, found := walk(child); found {
+					return cycle, true
+				}
+			case visiting:
+				for i, stacked := range stack {
+					if stacked == child {
+						cycle := append([]NodeID(nil), stack[i:]...)
+						cycle = append(cycle, child)
+						return cycle, true
+					}
+				}
+			}
+		}
+		stack = stack[:len(stack)-1]
+		state[id] = done
+		return nil, false
+	}
+	for _, id := range g.order {
+		if state[id] == unseen {
+			if cycle, found := walk(id); found {
+				return cycle, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func cleanID(id NodeID) NodeID {
+	return NodeID(strings.TrimSpace(string(id)))
+}

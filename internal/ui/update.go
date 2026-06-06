@@ -1,0 +1,405 @@
+package ui
+
+import (
+	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"dagim/internal/graph"
+)
+
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		m.input.Width = inputWidth(msg.Width)
+		return m, nil
+	case tea.KeyMsg:
+		m.message = ""
+		switch m.mode {
+		case modeNode:
+			return m.updateNode(msg)
+		case modePrompt:
+			return m.updatePrompt(msg)
+		case modeSearch:
+			return m.updateSearch(msg)
+		case modeRoots:
+			return m.updateRoots(msg)
+		case modeSequence:
+			return m.updateSequence(msg)
+		case modeInspect:
+			return m.updateInspect(msg)
+		case modeConfirmDelete:
+			return m.updateConfirmDelete(msg)
+		case modeConfirmQuit:
+			return m.updateConfirmQuit(msg)
+		case modeHelp:
+			if msg.String() == "esc" || msg.String() == "q" || msg.String() == "?" {
+				m.mode = modeNode
+			}
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.current == "" {
+		switch msg.String() {
+		case "a":
+			return m.setPrompt(promptAddNode, "Add first node", "")
+		case "?":
+			m.mode = modeHelp
+			return m, nil
+		case "q", "ctrl+c":
+			if m.dirty {
+				m.mode = modeConfirmQuit
+				return m, nil
+			}
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
+	items := m.relationItems()
+	switch msg.String() {
+	case "j", "down":
+		if len(items) > 0 && m.cursor < len(items)-1 {
+			m.cursor++
+		}
+	case "k", "up":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "enter":
+		if len(items) > 0 && m.cursor >= 0 && m.cursor < len(items) {
+			m.current = items[m.cursor].id
+			m.cursor = 0
+		}
+	case "a":
+		return m.setPrompt(promptAddNode, "Add node", "")
+	case "p":
+		return m.setPrompt(promptAddParent, "Add/link parent", "")
+	case "c":
+		return m.setPrompt(promptAddChild, "Add/link child", "")
+	case "x":
+		if len(items) > 0 && m.cursor >= 0 && m.cursor < len(items) {
+			item := items[m.cursor]
+			if item.kind == "parent" {
+				if err := m.g.RemoveEdge(item.id, m.current); err != nil {
+					m.message = err.Error()
+				} else {
+					m.dirty = true
+				}
+			} else {
+				if err := m.g.RemoveEdge(m.current, item.id); err != nil {
+					m.message = err.Error()
+				} else {
+					m.dirty = true
+				}
+			}
+			if m.cursor >= len(m.relationItems()) && m.cursor > 0 {
+				m.cursor--
+			}
+		}
+	case "r":
+		node, _ := m.g.Node(m.current)
+		return m.setPrompt(promptRename, "Rename node", node.Text)
+	case "d":
+		parents, _ := m.g.ParentsOf(m.current)
+		children, _ := m.g.ChildrenOf(m.current)
+		if len(parents)+len(children) > 0 {
+			m.mode = modeConfirmDelete
+			return m, nil
+		}
+		m = m.deleteCurrent()
+	case "/":
+		return m.setSearch()
+	case "f":
+		m.mode = modeRoots
+		m.rootsCursor = 0
+	case "J":
+		if m.g.MoveLater(m.current) {
+			m.dirty = true
+		}
+	case "K":
+		if m.g.MoveEarlier(m.current) {
+			m.dirty = true
+		}
+	case "m":
+		m.seq = graph.NewSequence(m.g)
+		m.mode = modeSequence
+		m.cursor = 0
+	case "w":
+		m = m.save()
+	case "?":
+		m.mode = modeHelp
+	case "q", "ctrl+c":
+		if m.dirty {
+			m.mode = modeConfirmQuit
+			return m, nil
+		}
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func (m Model) updatePrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.mode = m.previous
+		m.promptAction = promptNone
+		return m, nil
+	case "up":
+		if m.suggestionCursor > 0 {
+			m.suggestionCursor--
+		}
+		return m, nil
+	case "down":
+		results := m.searchResults(m.input.Value())
+		if m.suggestionCursor < len(results)-1 {
+			m.suggestionCursor++
+		}
+		return m, nil
+	case "ctrl+n":
+		return m.submitPrompt(false)
+	case "enter":
+		return m.submitPrompt(true)
+	}
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	m.suggestionCursor = 0
+	return m, cmd
+}
+
+func (m Model) submitPrompt(useSuggestion bool) (tea.Model, tea.Cmd) {
+	value := strings.TrimSpace(m.input.Value())
+	switch m.promptAction {
+	case promptAddNode:
+		duplicateText := m.hasExactText(value)
+		id, err := m.g.AddNode(value)
+		if err != nil {
+			m.message = err.Error()
+			return m, nil
+		}
+		m.current = id
+		m.cursor = 0
+		m.dirty = true
+		if duplicateText {
+			m.message = "created separate node with duplicate text"
+		}
+	case promptRename:
+		if err := m.g.RenameNode(m.current, value); err != nil {
+			m.message = err.Error()
+			return m, nil
+		}
+		m.dirty = true
+	case promptAddParent, promptAddChild:
+		asParent := m.promptAction == promptAddParent
+		var id graph.NodeID
+		var ok bool
+		if useSuggestion {
+			id, ok = m.selectedSuggestion()
+		}
+		if !ok {
+			id, ok = m.findExactNode(value)
+		}
+		if ok {
+			var err error
+			if asParent {
+				err = m.g.AddEdge(id, m.current)
+			} else {
+				err = m.g.AddEdge(m.current, id)
+			}
+			if err != nil {
+				m.message = err.Error()
+				return m, nil
+			}
+			m.dirty = true
+		} else {
+			m = m.addLinkedNode(value, asParent)
+		}
+	case promptExportSequence:
+		m = m.exportSequence(value)
+		m.mode = modeSequence
+		m.promptAction = promptNone
+		return m, nil
+	}
+	m.mode = modeNode
+	m.promptAction = promptNone
+	m = m.ensureCurrent()
+	return m, nil
+}
+
+func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	results := m.searchResults(m.input.Value())
+	switch msg.String() {
+	case "esc":
+		m.mode = modeNode
+		return m, nil
+	case "up":
+		if m.searchCursor > 0 {
+			m.searchCursor--
+		}
+		return m, nil
+	case "down":
+		if m.searchCursor < len(results)-1 {
+			m.searchCursor++
+		}
+		return m, nil
+	case "enter":
+		if len(results) > 0 {
+			if m.searchCursor >= len(results) {
+				m.searchCursor = len(results) - 1
+			}
+			m.current = results[m.searchCursor]
+			m.cursor = 0
+			m.mode = modeNode
+		}
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	m.searchCursor = 0
+	return m, cmd
+}
+
+func (m Model) updateRoots(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	roots := m.g.Roots()
+	switch msg.String() {
+	case "esc", "f":
+		m.mode = modeNode
+	case "j", "down":
+		if m.rootsCursor < len(roots)-1 {
+			m.rootsCursor++
+		}
+	case "k", "up":
+		if m.rootsCursor > 0 {
+			m.rootsCursor--
+		}
+	case "enter":
+		if len(roots) > 0 {
+			m.current = roots[m.rootsCursor]
+			m.cursor = 0
+			m.mode = modeNode
+		}
+	case "/":
+		return m.setSearch()
+	}
+	return m, nil
+}
+
+func (m Model) updateSequence(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.seq == nil {
+		m.seq = graph.NewSequence(m.g)
+	}
+	available := m.seq.Available()
+	switch msg.String() {
+	case "esc":
+		m.mode = modeNode
+	case "j", "down":
+		if m.cursor < len(available)-1 {
+			m.cursor++
+		}
+	case "k", "up":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case " ":
+		if len(available) > 0 {
+			if m.cursor >= len(available) {
+				m.cursor = len(available) - 1
+			}
+			if err := m.seq.Pick(available[m.cursor]); err != nil {
+				m.message = err.Error()
+			}
+			if m.cursor >= len(m.seq.Available()) && m.cursor > 0 {
+				m.cursor--
+			}
+		}
+	case "enter":
+		if len(available) > 0 {
+			if m.cursor >= len(available) {
+				m.cursor = len(available) - 1
+			}
+			m.inspectID = available[m.cursor]
+			m.mode = modeInspect
+		}
+	case "u":
+		if !m.seq.Undo() {
+			m.message = "nothing to undo"
+		}
+	case "r":
+		m.seq.Reset()
+		m.cursor = 0
+	case "e":
+		return m.setPrompt(promptExportSequence, "Export sequence", defaultSequencePath(m.path))
+	}
+	return m, nil
+}
+
+func (m Model) updateInspect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "enter":
+		m.mode = modeSequence
+	}
+	return m, nil
+}
+
+func (m Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "Y":
+		m = m.deleteCurrent()
+		m.mode = modeNode
+	case "n", "N", "esc":
+		m.mode = modeNode
+	}
+	return m, nil
+}
+
+func (m Model) updateConfirmQuit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "Y":
+		m = m.save()
+		if !m.dirty {
+			return m, tea.Quit
+		}
+	case "n", "N":
+		return m, tea.Quit
+	case "c", "C", "esc":
+		m.mode = modeNode
+	}
+	return m, nil
+}
+
+func (m Model) deleteCurrent() Model {
+	if m.current == "" {
+		return m
+	}
+	order := m.g.Order()
+	index := 0
+	for i, id := range order {
+		if id == m.current {
+			index = i
+			break
+		}
+	}
+	if err := m.g.DeleteNode(m.current); err != nil {
+		m.message = err.Error()
+		return m
+	}
+	m.dirty = true
+	order = m.g.Order()
+	if len(order) == 0 {
+		m.current = ""
+		m.cursor = 0
+		return m
+	}
+	if index >= len(order) {
+		index = len(order) - 1
+	}
+	m.current = order[index]
+	m.cursor = 0
+	return m
+}

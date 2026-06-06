@@ -1,0 +1,12 @@
+# dagim v1
+
+node people-think-in-graphs: People think in graphs
+
+node existing-tools-bias-trees: Existing tools bias trees
+
+node graph-reticence-ui-problem: Graph reticence is a UI problem
+  parent people-think-in-graphs  # People think in graphs
+  parent existing-tools-bias-trees  # Existing tools bias trees
+
+node terminal-dag-editor-experiment: Terminal DAG editor experiment
+  parent graph-reticence-ui-problem  # Graph reticence is a UI problem
