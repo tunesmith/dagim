@@ -443,14 +443,15 @@ The node view is the default focused editing view.
 Example:
 
 ```text
-Node
-────────────────────────────────────────
-Graph reticence is a UI problem
-
 Parents
 ────────────────────────────────────────
   People think in graphs
   Existing tools bias trees
+
+Current node
+========================================
+Graph reticence is a UI problem
+graph-reticence-ui-problem
 
 Children
 ────────────────────────────────────────

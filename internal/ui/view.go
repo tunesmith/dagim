@@ -14,6 +14,7 @@ var (
 	mutedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
 	selectStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
+	nodeStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Bold(true)
 	commandStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 )
 
@@ -60,15 +61,6 @@ func (m Model) viewNode() string {
 		return "Current node is missing."
 	}
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Node"))
-	b.WriteByte('\n')
-	b.WriteString(rule())
-	b.WriteByte('\n')
-	b.WriteString(node.Text)
-	b.WriteByte('\n')
-	b.WriteString(mutedStyle.Render(string(node.ID)))
-	b.WriteString("\n\n")
-
 	cursor := 0
 	parents, _ := m.g.ParentsOf(node.ID)
 	b.WriteString(titleStyle.Render("Parents"))
@@ -87,6 +79,14 @@ func (m Model) viewNode() string {
 		}
 	}
 	b.WriteByte('\n')
+	b.WriteString(titleStyle.Render("Current node"))
+	b.WriteByte('\n')
+	b.WriteString(strongRule())
+	b.WriteByte('\n')
+	b.WriteString(nodeStyle.Render(node.Text))
+	b.WriteByte('\n')
+	b.WriteString(mutedStyle.Render(string(node.ID)))
+	b.WriteString("\n\n")
 
 	children, _ := m.g.ChildrenOf(node.ID)
 	b.WriteString(titleStyle.Render("Children"))
@@ -340,4 +340,8 @@ func (m Model) renderIDList(title string, id graph.NodeID, fn func(graph.NodeID)
 
 func rule() string {
 	return mutedStyle.Render(strings.Repeat("-", 42))
+}
+
+func strongRule() string {
+	return selectStyle.Render(strings.Repeat("=", 42))
 }
