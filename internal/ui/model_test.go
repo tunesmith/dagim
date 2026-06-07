@@ -181,6 +181,43 @@ func TestNewStartsEmptyGraphInNodeMode(t *testing.T) {
 	}
 }
 
+func TestNodeCanOpenEditPrompt(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	m := New("test.dagim", g)
+	m.mode = modeNode
+
+	next, _ := m.Update(runeKey('e'))
+	updated := next.(Model)
+
+	if updated.mode != modePrompt {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+	if updated.promptAction != promptEdit {
+		t.Fatalf("promptAction = %v", updated.promptAction)
+	}
+	if updated.promptTitle != "Edit node" {
+		t.Fatalf("promptTitle = %q", updated.promptTitle)
+	}
+	if updated.input.Value() != "Root node" {
+		t.Fatalf("input = %q", updated.input.Value())
+	}
+}
+
+func TestNodeCanOpenRootsViewWithR(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	m := New("test.dagim", g)
+	m.mode = modeNode
+
+	next, _ := m.Update(runeKey('r'))
+	updated := next.(Model)
+
+	if updated.mode != modeRoots {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+}
+
 func TestRootsCanOpenAddNodePrompt(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
@@ -535,6 +572,22 @@ func TestLeavesSearchEscReturnsToLeaves(t *testing.T) {
 	next, _ = searching.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	updated := next.(Model)
 	if updated.mode != modeLeaves {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+}
+
+func TestLeavesCanOpenRootsViewWithR(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	must(t, g.AddNodeWithID("leaf-node", "Leaf node"))
+	must(t, g.AddEdge("root-node", "leaf-node"))
+	m := New("test.dagim", g)
+	m.mode = modeLeaves
+
+	next, _ := m.Update(runeKey('r'))
+	updated := next.(Model)
+
+	if updated.mode != modeRoots {
 		t.Fatalf("mode = %v", updated.mode)
 	}
 }

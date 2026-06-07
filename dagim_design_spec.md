@@ -46,7 +46,7 @@ Version 1 should support:
 7. Fast linking of parents and children.
 8. Fast unlinking of parent/child edges without deleting nodes.
 9. Node deletion.
-10. Node rename/refactor.
+10. Node text editing without changing identity.
 11. Search and keyboard navigation across node text.
 12. A readable, git-friendly plain-text file format.
 13. Useful diffs for common changes.
@@ -472,8 +472,8 @@ Children
 Commands
 ────────────────────────────────────────
 a add node    p add parent    c add child    x unlink
-i inspect     r rename        d delete       / search
-f roots       l leaves        m sequence    w save
+i inspect     e edit          d delete       / search
+r roots       l leaves        m sequence    w save
 J/K reorder   R rewrite       q quit        ? help
 ```
 
@@ -484,7 +484,7 @@ The user should be able to:
 1. Focus parent nodes.
 2. Focus child nodes.
 3. Add a new node.
-4. Rename the current node.
+4. Edit the current node text.
 5. Delete the current node.
 6. Add/link an existing or new parent.
 7. Add/link an existing or new child.
@@ -511,9 +511,9 @@ p             add/link parent to current node
 c             add/link child to current node
 x             unlink selected relationship
 i             inspect selected node, or current node if no relationship is selected
-r             rename current node
+e             edit current node text
 d             delete current node, with confirmation if it has edges
-f             show roots view
+r             show roots view
 l             show leaves view
 J / K         move current node later/earlier in file order
 m             enter manual sequence mode
@@ -578,11 +578,11 @@ From current node:
 2. If a child is selected, remove `current -> child`.
 3. Confirm only if the UI makes accidental unlinking likely.
 
-## 13. Rename Behavior
+## 13. Edit Node Text Behavior
 
-Because node identity is the stable ID, rename changes only the node's text label by default.
+Because node identity is the stable ID, editing a node changes only the node's text label by default.
 
-Rename:
+Edit:
 
 ```text
 old text -> new text
@@ -591,7 +591,7 @@ old text -> new text
 Rules:
 
 1. Reject empty new text.
-2. If the new text already exists on another node, warn before accepting.
+2. Allow duplicate text because the node ID is identity.
 3. Update the node declaration text.
 4. Preserve the node ID.
 5. Preserve all incoming and outgoing edges.
@@ -995,7 +995,7 @@ Suggested modules/packages:
 ```text
 graph
   core data structures
-  add/delete/rename/link/unlink operations
+  add/delete/edit/link/unlink operations
   validation
   cycle detection
   roots and file-order operations
@@ -1046,7 +1046,7 @@ The TUI should track whether the graph has unsaved changes.
 Unsaved changes include:
 
 1. Node added.
-2. Node renamed.
+2. Node text edited.
 3. Node deleted.
 4. Edge added.
 5. Edge removed.
@@ -1166,9 +1166,9 @@ From node `A`, adding child `B` creates edge `A -> B`.
 
 The user can remove `A -> B` without deleting `A` or `B`.
 
-### 25.9 Rename
+### 25.9 Edit Node Text
 
-Renaming node ID `a` from text `A` to text `A2` preserves node ID `a`, preserves all edges, and updates canonical parent text hints on save.
+Editing node ID `a` from text `A` to text `A2` preserves node ID `a`, preserves all edges, and updates canonical parent text hints on save.
 
 ### 25.10 Delete
 
@@ -1269,8 +1269,8 @@ The user can export the current or completed manual sequence as one node per lin
 
 1. Add node.
 2. Add node generates readable unique ID.
-3. Rename node.
-4. Rename preserves ID and edges.
+3. Edit node text.
+4. Edit preserves ID and edges.
 5. Delete isolated node.
 6. Delete connected node removes incident edges.
 7. Add edge.
@@ -1351,7 +1351,7 @@ Start with correctness before UI polish:
 3. Add unit tests for parser, serializer, graph operations, validation, reordering, slug generation, and manual sequence state.
 4. Implement CLI entrypoints `dagim FILE` and `dagim --check FILE`.
 5. Implement the TUI with node view, search, roots view, file-order reordering, whole-file rewrite/rekey, and manual sequence mode.
-6. Ensure cycle rejection and rename behavior are correct.
+6. Ensure cycle rejection and edit behavior are correct.
 7. Ensure saving writes stable canonical diffs with visible node IDs and refreshed parent text hints.
 
 The most important product behavior is that the tool never silently collapses the DAG into an arbitrary total order. In manual sequence mode, the user chooses among currently unblocked nodes.

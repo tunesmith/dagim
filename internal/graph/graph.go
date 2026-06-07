@@ -106,7 +106,7 @@ func (g *Graph) AddNodeWithID(id NodeID, text string) error {
 	return nil
 }
 
-func (g *Graph) RenameNode(id NodeID, newText string) error {
+func (g *Graph) EditNodeText(id NodeID, newText string) error {
 	id, newText = cleanID(id), strings.TrimSpace(newText)
 	if newText == "" {
 		return ErrEmptyNodeText

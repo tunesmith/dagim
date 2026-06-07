@@ -119,9 +119,9 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.cursor--
 			}
 		}
-	case "r":
+	case "e":
 		node, _ := m.g.Node(m.current)
-		return m.setPrompt(promptRename, "Rename node", node.Text)
+		return m.setPrompt(promptEdit, "Edit node", node.Text)
 	case "d":
 		parents, _ := m.g.ParentsOf(m.current)
 		children, _ := m.g.ChildrenOf(m.current)
@@ -132,7 +132,7 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m = m.deleteCurrent()
 	case "/":
 		return m.setSearch()
-	case "f":
+	case "r":
 		m.mode = modeRoots
 		m.rootsCursor = 0
 	case "l":
@@ -216,8 +216,8 @@ func (m Model) submitPrompt(useSuggestion bool) (tea.Model, tea.Cmd) {
 		if duplicateText {
 			m.message = "created separate node with duplicate text"
 		}
-	case promptRename:
-		if err := m.g.RenameNode(m.current, value); err != nil {
+	case promptEdit:
+		if err := m.g.EditNodeText(m.current, value); err != nil {
 			m.message = err.Error()
 			return m, nil
 		}
@@ -395,7 +395,7 @@ func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "/":
 		return m.setSearch()
-	case "f":
+	case "r":
 		m.mode = modeRoots
 		m.rootsCursor = 0
 	case "w":

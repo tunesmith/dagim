@@ -36,7 +36,7 @@ const (
 	promptAddNode
 	promptAddParent
 	promptAddChild
-	promptRename
+	promptEdit
 	promptExportSequence
 )
 

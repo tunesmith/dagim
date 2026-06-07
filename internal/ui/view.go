@@ -113,9 +113,9 @@ func (m Model) viewNode() string {
 	b.WriteByte('\n')
 	b.WriteString(commandStyle.Render("a add node    p add parent    c add child    x unlink"))
 	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("i inspect     r rename        d delete       / search"))
+	b.WriteString(commandStyle.Render("i inspect     e edit          d delete       / search"))
 	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("f roots       l leaves        m sequence    w save"))
+	b.WriteString(commandStyle.Render("r roots       l leaves        m sequence    w save"))
 	b.WriteByte('\n')
 	b.WriteString(commandStyle.Render("J/K reorder   R rewrite       q quit        ? help"))
 	return b.String()
@@ -223,7 +223,7 @@ func (m Model) viewLeaves() string {
 		}
 	}
 	b.WriteString("\n")
-	b.WriteString(commandStyle.Render("Enter focus    i inspect    / search    f roots"))
+	b.WriteString(commandStyle.Render("Enter focus    i inspect    / search    r roots"))
 	b.WriteByte('\n')
 	b.WriteString(commandStyle.Render("w save         q quit       ? help      Esc back"))
 	return b.String()
@@ -339,8 +339,8 @@ func (m Model) viewHelp() string {
 		"Non-empty files open to roots. Enter focuses a selected root.",
 		"",
 		"a add node        p add/link parent    c add/link child",
-		"x unlink          i inspect            r rename",
-		"d delete          / search             f roots",
+		"x unlink          i inspect            e edit",
+		"d delete          / search             r roots",
 		"l leaves          m sequence           J/K reorder",
 		"w save            R rewrite file       q quit",
 		"ctrl+c force quit ctrl+z suspend",

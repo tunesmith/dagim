@@ -54,12 +54,12 @@ func TestSlugifyFallback(t *testing.T) {
 	}
 }
 
-func TestRenamePreservesIDAndEdges(t *testing.T) {
+func TestEditNodeTextPreservesIDAndEdges(t *testing.T) {
 	g := mustGraph(t, "a", "A", "b", "B")
 	if err := g.AddEdge("a", "b"); err != nil {
 		t.Fatal(err)
 	}
-	if err := g.RenameNode("a", "A2"); err != nil {
+	if err := g.EditNodeText("a", "A2"); err != nil {
 		t.Fatal(err)
 	}
 	node, _ := g.Node("a")
