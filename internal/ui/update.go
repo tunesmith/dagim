@@ -38,7 +38,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateConfirmQuit(msg)
 		case modeHelp:
 			if msg.String() == "esc" || msg.String() == "q" || msg.String() == "?" {
-				m.mode = modeNode
+				m.mode = m.previous
 			}
 			return m, nil
 		}
@@ -52,10 +52,12 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "a":
 			return m.setPrompt(promptAddNode, "Add first node", "")
 		case "?":
+			m.previous = modeNode
 			m.mode = modeHelp
 			return m, nil
 		case "q", "ctrl+c":
 			if m.dirty {
+				m.previous = modeNode
 				m.mode = modeConfirmQuit
 				return m, nil
 			}
@@ -142,9 +144,11 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "R":
 		m.mode = modeConfirmRewrite
 	case "?":
+		m.previous = modeNode
 		m.mode = modeHelp
 	case "q", "ctrl+c":
 		if m.dirty {
+			m.previous = modeNode
 			m.mode = modeConfirmQuit
 			return m, nil
 		}
@@ -244,7 +248,7 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	results := m.searchResults(m.input.Value())
 	switch msg.String() {
 	case "esc":
-		m.mode = modeNode
+		m.mode = m.previous
 		return m, nil
 	case "up":
 		if m.searchCursor > 0 {
@@ -286,8 +290,8 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) updateRoots(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	roots := m.g.Roots()
 	switch msg.String() {
-	case "esc", "f":
-		m.mode = modeNode
+	case "a":
+		return m.setPrompt(promptAddNode, "Add root node", "")
 	case "j", "down":
 		if m.rootsCursor < len(roots)-1 {
 			m.rootsCursor++
@@ -313,6 +317,18 @@ func (m Model) updateRoots(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "/":
 		return m.setSearch()
+	case "w":
+		m = m.save()
+	case "?":
+		m.previous = modeRoots
+		m.mode = modeHelp
+	case "q", "ctrl+c":
+		if m.dirty {
+			m.previous = modeRoots
+			m.mode = modeConfirmQuit
+			return m, nil
+		}
+		return m, tea.Quit
 	}
 	return m, nil
 }
@@ -414,7 +430,7 @@ func (m Model) updateConfirmQuit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "n", "N":
 		return m, tea.Quit
 	case "c", "C", "esc":
-		m.mode = modeNode
+		m.mode = m.previous
 	}
 	return m, nil
 }

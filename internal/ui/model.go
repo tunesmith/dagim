@@ -85,6 +85,7 @@ func New(path string, g *graph.Graph) Model {
 	}
 	if nodes := g.Nodes(); len(nodes) > 0 {
 		m.current = nodes[0].ID
+		m.mode = modeRoots
 	}
 	return m
 }

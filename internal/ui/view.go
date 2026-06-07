@@ -196,7 +196,9 @@ func (m Model) viewRoots() string {
 		}
 	}
 	b.WriteString("\n")
-	b.WriteString(commandStyle.Render("Enter focus    i inspect    Up/Down select    / search    Esc back"))
+	b.WriteString(commandStyle.Render("a add root    Enter focus    i inspect    / search"))
+	b.WriteByte('\n')
+	b.WriteString(commandStyle.Render("w save        q quit         ? help"))
 	return b.String()
 }
 
@@ -304,6 +306,8 @@ func (m Model) viewHelp() string {
 		titleStyle.Render("Help"),
 		m.rule(),
 		"dagim edits one plain-text DAG file.",
+		"",
+		"Non-empty files open to roots. Enter focuses a selected root.",
 		"",
 		"a add node        p add/link parent    c add/link child",
 		"x unlink          i inspect            r rename",

@@ -95,6 +95,131 @@ func TestInspectReturnsToPreviousMode(t *testing.T) {
 	}
 }
 
+func TestNewStartsOnRootsForNonEmptyGraph(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	must(t, g.AddNodeWithID("child-node", "Child node"))
+	must(t, g.AddEdge("root-node", "child-node"))
+
+	m := New("test.dagim", g)
+
+	if m.mode != modeRoots {
+		t.Fatalf("mode = %v", m.mode)
+	}
+	if m.current != "root-node" {
+		t.Fatalf("current = %q", m.current)
+	}
+	if view := m.View(); !strings.Contains(view, "Roots") || !strings.Contains(view, "Root node") {
+		t.Fatalf("expected roots view on startup:\n%s", view)
+	}
+}
+
+func TestNewStartsEmptyGraphInNodeMode(t *testing.T) {
+	m := New("test.dagim", graph.New())
+
+	if m.mode != modeNode {
+		t.Fatalf("mode = %v", m.mode)
+	}
+	if view := m.View(); !strings.Contains(view, "No nodes yet") {
+		t.Fatalf("expected empty node state:\n%s", view)
+	}
+}
+
+func TestRootsCanOpenAddRootPrompt(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	m := New("test.dagim", g)
+
+	next, _ := m.Update(runeKey('a'))
+	updated := next.(Model)
+
+	if updated.mode != modePrompt {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+	if updated.previous != modeRoots {
+		t.Fatalf("previous = %v", updated.previous)
+	}
+	if updated.promptAction != promptAddNode {
+		t.Fatalf("promptAction = %v", updated.promptAction)
+	}
+}
+
+func TestRootsEscDoesNotEnterNodeView(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("first-root", "First root"))
+	must(t, g.AddNodeWithID("second-root", "Second root"))
+	m := New("test.dagim", g)
+	m.rootsCursor = 1
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated := next.(Model)
+
+	if updated.mode != modeRoots {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+	if updated.rootsCursor != 1 {
+		t.Fatalf("rootsCursor = %d", updated.rootsCursor)
+	}
+	if updated.current != "first-root" {
+		t.Fatalf("current = %q", updated.current)
+	}
+}
+
+func TestRootsSearchEscReturnsToRoots(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	m := New("test.dagim", g)
+
+	next, _ := m.Update(runeKey('/'))
+	searching := next.(Model)
+	if searching.mode != modeSearch {
+		t.Fatalf("mode = %v", searching.mode)
+	}
+
+	next, _ = searching.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated := next.(Model)
+	if updated.mode != modeRoots {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+}
+
+func TestRootsHelpEscReturnsToRoots(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	m := New("test.dagim", g)
+
+	next, _ := m.Update(runeKey('?'))
+	helping := next.(Model)
+	if helping.mode != modeHelp {
+		t.Fatalf("mode = %v", helping.mode)
+	}
+
+	next, _ = helping.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated := next.(Model)
+	if updated.mode != modeRoots {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+}
+
+func TestRootsQuitCancelReturnsToRoots(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	m := New("test.dagim", g)
+	m.dirty = true
+
+	next, _ := m.Update(runeKey('q'))
+	confirming := next.(Model)
+	if confirming.mode != modeConfirmQuit {
+		t.Fatalf("mode = %v", confirming.mode)
+	}
+
+	next, _ = confirming.Update(runeKey('c'))
+	updated := next.(Model)
+	if updated.mode != modeRoots {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+}
+
 func TestLinkPromptHidesDuplicateEdgeCandidates(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("parent", "Existing parent"))
@@ -160,6 +285,10 @@ func containsID(ids []graph.NodeID, want graph.NodeID) bool {
 		}
 	}
 	return false
+}
+
+func runeKey(r rune) tea.KeyMsg {
+	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}}
 }
 
 func must(t *testing.T, err error) {

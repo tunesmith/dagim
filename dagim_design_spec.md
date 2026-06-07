@@ -438,6 +438,8 @@ Primary views:
 4. Manual sequence mode.
 5. Help/command view.
 
+When opening a non-empty graph, the TUI should start in the roots view. Empty files should start in the empty node state so the first action is still `a` to add a node.
+
 The core capture loop should emphasize defining graph relationships while ideas are being created:
 
 1. From the top-level or empty state, add a new node quickly.
@@ -448,7 +450,7 @@ The core capture loop should emphasize defining graph relationships while ideas 
 
 ## 11. Node View
 
-The node view is the default focused editing view.
+The node view is the focused editing view for a selected node.
 
 Example:
 
@@ -653,10 +655,13 @@ This view is useful because it shows the initial frontier of the graph.
 Rules:
 
 1. Display roots in file order.
-2. Do not automatically linearize the graph.
-3. Enter focuses a selected node.
-4. Search/filter may be available.
-5. This view does not mutate graph state.
+2. Open here by default for non-empty graphs.
+3. Do not automatically linearize the graph.
+4. Enter focuses a selected node.
+5. `a` adds a new top-level/root node.
+6. Search/filter may be available.
+7. Inspect should expose IDs without showing IDs inline in the root list.
+8. Roots view does not need a generic back-to-node command; entering node view should be an explicit `Enter` action on the selected root.
 
 This view is distinct from manual sequence mode's dynamic frontier. Roots are a property of the graph. The sequence frontier is a property of temporary sequencing state.
 
@@ -1139,7 +1144,7 @@ is rejected with a clear message.
 
 ### 25.12 Roots View
 
-The user can view all nodes with no parents.
+The user starts on roots for a non-empty graph and can view all nodes with no parents.
 
 ### 25.13 Search
 
