@@ -154,7 +154,7 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.seqReturn = modeNode
 		m.mode = modeSequence
 		m.cursor = 0
-	case "w":
+	case "s":
 		m = m.save()
 	case "R":
 		m.mode = modeConfirmRewrite
@@ -346,7 +346,7 @@ func (m Model) updateRoots(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.seqReturn = modeRoots
 		m.mode = modeSequence
 		m.cursor = 0
-	case "w":
+	case "s":
 		m = m.save()
 	case "?":
 		m.previous = modeRoots
@@ -398,7 +398,7 @@ func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		m.mode = modeRoots
 		m.rootsCursor = 0
-	case "w":
+	case "s":
 		m = m.save()
 	case "?":
 		m.previous = modeLeaves

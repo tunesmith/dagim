@@ -9,6 +9,8 @@ import (
 	"dagim/internal/graph"
 )
 
+const maxContentWidth = 112
+
 var (
 	titleStyle   = lipgloss.NewStyle().Bold(true)
 	mutedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
@@ -49,7 +51,7 @@ func (m Model) View() string {
 	if m.message != "" {
 		body += "\n\n" + errorStyle.Render(m.message)
 	}
-	return body
+	return m.padBlock(body)
 }
 
 func (m Model) viewNode() string {
@@ -115,7 +117,7 @@ func (m Model) viewNode() string {
 	b.WriteByte('\n')
 	b.WriteString(commandStyle.Render("i inspect     e edit          d delete       / search"))
 	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("r roots       l leaves        m sequence    w save"))
+	b.WriteString(commandStyle.Render("r roots       l leaves        m sequence    s save"))
 	b.WriteByte('\n')
 	b.WriteString(commandStyle.Render("J/K reorder   R rewrite       q quit        ? help"))
 	return b.String()
@@ -207,7 +209,7 @@ func (m Model) viewRoots() string {
 	b.WriteString("\n")
 	b.WriteString(commandStyle.Render("a add node    Enter focus    i inspect    / search"))
 	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("l leaves      m sequence     w save"))
+	b.WriteString(commandStyle.Render("l leaves      m sequence     s save"))
 	b.WriteByte('\n')
 	b.WriteString(commandStyle.Render("q quit        ? help"))
 	return b.String()
@@ -232,7 +234,7 @@ func (m Model) viewLeaves() string {
 	b.WriteString("\n")
 	b.WriteString(commandStyle.Render("Enter focus    i inspect    / search    r roots"))
 	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("w save         q quit       ? help      Esc back"))
+	b.WriteString(commandStyle.Render("s save         q quit       ? help      Esc back"))
 	return b.String()
 }
 
@@ -349,7 +351,7 @@ func (m Model) viewHelp() string {
 		"x unlink          i inspect            e edit",
 		"d delete          / search             r roots",
 		"l leaves          m sequence           J/K reorder",
-		"w save            R rewrite file       q quit",
+		"s save            R rewrite file       q quit",
 		"ctrl+c force quit ctrl+z suspend",
 		"",
 		"In parent/child prompts, Enter links the selected match and Ctrl+N creates the typed text.",
@@ -423,15 +425,46 @@ func genericRule() string {
 }
 
 func (m Model) contentWidth() int {
-	width := m.width
+	return contentWidthForTerminal(m.width)
+}
+
+func contentWidthForTerminal(width int) int {
+	margin := leftMarginForTerminal(width)
 	if width <= 0 {
 		width = 80
 	}
-	width -= 2
+	width -= margin + 2
+	if width > maxContentWidth {
+		width = maxContentWidth
+	}
 	if width < 24 {
 		return 24
 	}
 	return width
+}
+
+func (m Model) padBlock(text string) string {
+	margin := leftMarginForTerminal(m.width)
+	if margin == 0 || text == "" {
+		return text
+	}
+	pad := strings.Repeat(" ", margin)
+	lines := strings.Split(text, "\n")
+	for i := range lines {
+		lines[i] = pad + lines[i]
+	}
+	return strings.Join(lines, "\n")
+}
+
+func leftMarginForTerminal(width int) int {
+	switch {
+	case width >= maxContentWidth+30:
+		return 4
+	case width >= 90:
+		return 2
+	default:
+		return 0
+	}
 }
 
 func (m Model) renderWrapped(prefix, text string, style lipgloss.Style) string {

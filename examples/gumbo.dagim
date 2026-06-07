@@ -81,7 +81,7 @@ node turn-off-heat: Turn off heat
 node slow-stir-gumbo-file: Slow stir in 1 TBSP gumbo file
   parent turn-off-heat  # Turn off heat
 
-node server-over-steamed-rice: Serve over steamed rice
+node serve-over-steamed-rice: Serve over steamed rice
   parent prepare-rice-cooker-press-start  # Prepare rice in rice cooker and press start
   parent slow-stir-gumbo-file  # Slow stir in 1 TBSP gumbo file
 

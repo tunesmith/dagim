@@ -405,13 +405,11 @@ func (m Model) addLinkedNode(text string, asParent bool) Model {
 }
 
 func inputWidth(width int) int {
-	if width <= 0 {
-		return 80
-	}
+	width = contentWidthForTerminal(width)
 	if width < 30 {
 		return width
 	}
-	return width - 8
+	return width - 4
 }
 
 func defaultSequencePath(path string) string {

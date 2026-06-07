@@ -473,7 +473,7 @@ Commands
 ────────────────────────────────────────
 a add node    p add parent    c add child    x unlink
 i inspect     e edit          d delete       / search
-r roots       l leaves        m sequence    w save
+r roots       l leaves        m sequence    s save
 J/K reorder   R rewrite       q quit        ? help
 ```
 
@@ -498,6 +498,8 @@ Normal node, roots, leaves, search, and sequence lists should show node text wit
 
 Wrapped rows in selectable node lists should use a hanging indent on continuation lines so one long node does not visually read as multiple nodes.
 
+On wide terminals, the TUI should remain left-anchored with a modest gutter and a capped content width. Separators and wrapped text should not stretch across an entire large monitor.
+
 ### 11.2 Suggested Keybindings
 
 These are proposed defaults, not sacred API.
@@ -519,7 +521,7 @@ r             show roots view
 l             show leaves view
 J / K         move current node later/earlier in file order
 m             enter manual sequence mode
-w             write/save file
+s             write/save file
 R             rewrite file: regenerate IDs, update references, save canonical format
 ?             help
 q             quit, prompting if unsaved changes exist

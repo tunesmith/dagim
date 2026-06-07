@@ -69,6 +69,30 @@ func TestNodeViewWrapsTextAndHidesIDs(t *testing.T) {
 	}
 }
 
+func TestWideViewCapsRulesAndAddsGutter(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+
+	m := New("test.dagim", g)
+	m.mode = modeNode
+	m.current = "root-node"
+	m.width = 180
+	view := m.View()
+
+	if !strings.HasPrefix(view, "    ") {
+		t.Fatalf("expected wide view to start with a gutter:\n%s", view)
+	}
+	if strings.Contains(view, strings.Repeat("-", maxContentWidth+1)) {
+		t.Fatalf("rule exceeded content cap:\n%s", view)
+	}
+	if strings.Contains(view, strings.Repeat("=", maxContentWidth+1)) {
+		t.Fatalf("strong rule exceeded content cap:\n%s", view)
+	}
+	if !strings.Contains(view, strings.Repeat("-", maxContentWidth)) {
+		t.Fatalf("expected capped rule width:\n%s", view)
+	}
+}
+
 func TestInspectShowsIDs(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("current-node-id", "Current node"))
@@ -216,6 +240,40 @@ func TestNodeCanOpenRootsViewWithR(t *testing.T) {
 
 	if updated.mode != modeRoots {
 		t.Fatalf("mode = %v", updated.mode)
+	}
+}
+
+func TestSaveUsesSKey(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.dagim")
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	m := New(path, g)
+	m.mode = modeNode
+	m.current = "root-node"
+	m.dirty = true
+
+	next, _ := m.Update(runeKey('w'))
+	updated := next.(Model)
+	if !updated.dirty {
+		t.Fatal("w should not save")
+	}
+	if _, err := os.Stat(path); err == nil {
+		t.Fatal("w created a save file")
+	} else if !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+
+	next, _ = updated.Update(runeKey('s'))
+	updated = next.(Model)
+	if updated.dirty {
+		t.Fatal("s should save and clear dirty state")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "Root node") {
+		t.Fatalf("saved file missing node text:\n%s", data)
 	}
 }
 
