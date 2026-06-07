@@ -373,6 +373,172 @@ func TestRootsQuitCancelReturnsToRoots(t *testing.T) {
 	}
 }
 
+func TestNodeCanOpenLeavesView(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	must(t, g.AddNodeWithID("leaf-node", "Leaf node"))
+	must(t, g.AddEdge("root-node", "leaf-node"))
+	m := New("test.dagim", g)
+	m.mode = modeNode
+	m.current = "root-node"
+
+	next, _ := m.Update(runeKey('l'))
+	updated := next.(Model)
+
+	if updated.mode != modeLeaves {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+	if updated.previous != modeNode {
+		t.Fatalf("previous = %v", updated.previous)
+	}
+	if updated.leavesReturn != modeNode {
+		t.Fatalf("leavesReturn = %v", updated.leavesReturn)
+	}
+	view := updated.View()
+	if !strings.Contains(view, "Leaves") || !strings.Contains(view, "Leaf node") {
+		t.Fatalf("expected leaves view:\n%s", view)
+	}
+	if strings.Contains(view, "Root node") {
+		t.Fatalf("non-leaf was shown:\n%s", view)
+	}
+}
+
+func TestRootsCanOpenLeavesView(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	must(t, g.AddNodeWithID("leaf-node", "Leaf node"))
+	must(t, g.AddEdge("root-node", "leaf-node"))
+	m := New("test.dagim", g)
+
+	next, _ := m.Update(runeKey('l'))
+	updated := next.(Model)
+
+	if updated.mode != modeLeaves {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+	if updated.previous != modeRoots {
+		t.Fatalf("previous = %v", updated.previous)
+	}
+	if updated.leavesReturn != modeRoots {
+		t.Fatalf("leavesReturn = %v", updated.leavesReturn)
+	}
+}
+
+func TestLeavesEnterFocusesSelectedLeaf(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	must(t, g.AddNodeWithID("first-leaf", "First leaf"))
+	must(t, g.AddNodeWithID("second-leaf", "Second leaf"))
+	must(t, g.AddEdge("root-node", "first-leaf"))
+	must(t, g.AddEdge("root-node", "second-leaf"))
+	m := New("test.dagim", g)
+	m.mode = modeLeaves
+	m.leavesCursor = 1
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := next.(Model)
+
+	if updated.mode != modeNode {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+	if updated.current != "second-leaf" {
+		t.Fatalf("current = %q", updated.current)
+	}
+}
+
+func TestLeavesEnterClampsStaleCursor(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	must(t, g.AddNodeWithID("leaf-node", "Leaf node"))
+	must(t, g.AddEdge("root-node", "leaf-node"))
+	m := New("test.dagim", g)
+	m.mode = modeLeaves
+	m.leavesCursor = 10
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := next.(Model)
+
+	if updated.mode != modeNode {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+	if updated.current != "leaf-node" {
+		t.Fatalf("current = %q", updated.current)
+	}
+}
+
+func TestLeavesEscReturnsToLaunchingMode(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	must(t, g.AddNodeWithID("leaf-node", "Leaf node"))
+	must(t, g.AddEdge("root-node", "leaf-node"))
+	m := New("test.dagim", g)
+	m.mode = modeNode
+	m.current = "root-node"
+
+	next, _ := m.Update(runeKey('l'))
+	leaves := next.(Model)
+	next, _ = leaves.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated := next.(Model)
+
+	if updated.mode != modeNode {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+	if updated.current != "root-node" {
+		t.Fatalf("current = %q", updated.current)
+	}
+}
+
+func TestLeavesInspectDoesNotLoseLaunchingMode(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	must(t, g.AddNodeWithID("leaf-node", "Leaf node"))
+	must(t, g.AddEdge("root-node", "leaf-node"))
+	m := New("test.dagim", g)
+	m.mode = modeNode
+	m.current = "root-node"
+
+	next, _ := m.Update(runeKey('l'))
+	leaves := next.(Model)
+	next, _ = leaves.Update(runeKey('i'))
+	inspecting := next.(Model)
+	if inspecting.mode != modeInspect {
+		t.Fatalf("mode = %v", inspecting.mode)
+	}
+
+	next, _ = inspecting.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	leaves = next.(Model)
+	if leaves.mode != modeLeaves {
+		t.Fatalf("mode = %v", leaves.mode)
+	}
+
+	next, _ = leaves.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated := next.(Model)
+	if updated.mode != modeNode {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+}
+
+func TestLeavesSearchEscReturnsToLeaves(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	must(t, g.AddNodeWithID("leaf-node", "Leaf node"))
+	must(t, g.AddEdge("root-node", "leaf-node"))
+	m := New("test.dagim", g)
+	m.mode = modeLeaves
+
+	next, _ := m.Update(runeKey('/'))
+	searching := next.(Model)
+	if searching.mode != modeSearch {
+		t.Fatalf("mode = %v", searching.mode)
+	}
+
+	next, _ = searching.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated := next.(Model)
+	if updated.mode != modeLeaves {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+}
+
 func TestLinkPromptHidesDuplicateEdgeCandidates(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("parent", "Existing parent"))

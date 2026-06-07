@@ -4,10 +4,9 @@ These ideas are intentionally outside the next focused changeset. They should be
 
 ## Views
 
-1. Add a leaves view showing nodes with no children.
-2. Add "why is this blocked?" inspection for manual sequence mode.
-3. Add "what would this unblock?" preview for selected nodes.
-4. Add subgraph filtering for larger graphs.
+1. Add "why is this blocked?" inspection for manual sequence mode.
+2. Add "what would this unblock?" preview for selected nodes.
+3. Add subgraph filtering for larger graphs.
 
 ## File and Identity
 

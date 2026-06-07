@@ -166,6 +166,24 @@ func TestRootsAndOrdering(t *testing.T) {
 	}
 }
 
+func TestLeavesAndOrdering(t *testing.T) {
+	g := mustGraph(t, "a", "A", "b", "B", "c", "C", "d", "D")
+	mustAddEdge(t, g, "a", "c")
+	mustAddEdge(t, g, "b", "c")
+	if got := g.Leaves(); !reflect.DeepEqual(got, []NodeID{"c", "d"}) {
+		t.Fatalf("leaves = %#v", got)
+	}
+	if !g.MoveEarlier("d") {
+		t.Fatal("move earlier failed")
+	}
+	if got := g.Order(); !reflect.DeepEqual(got, []NodeID{"a", "b", "d", "c"}) {
+		t.Fatalf("order = %#v", got)
+	}
+	if got := g.Leaves(); !reflect.DeepEqual(got, []NodeID{"d", "c"}) {
+		t.Fatalf("leaves after reorder = %#v", got)
+	}
+}
+
 func TestManualSequence(t *testing.T) {
 	g := mustGraph(t, "a", "A", "b", "B", "c", "C")
 	mustAddEdge(t, g, "a", "c")

@@ -146,7 +146,7 @@ func TestCheckReportsCanonicalFormatting(t *testing.T) {
 	if result.IsCanonical {
 		t.Fatal("expected noncanonical input")
 	}
-	if result.Stats.Nodes != 1 || result.Stats.Edges != 0 || result.Stats.Roots != 1 {
+	if result.Stats.Nodes != 1 || result.Stats.Edges != 0 || result.Stats.Roots != 1 || result.Stats.Leaves != 1 {
 		t.Fatalf("stats = %#v", result.Stats)
 	}
 	if result.Canonical != "# dagim v1\n\nnode a: A\n" {

@@ -42,3 +42,79 @@ node dice-green-red-bell-pepper-veggie-bowl: Dice 1.5 cups green/red bell pepper
 
 node dice-yellow-onion-veggie-bowl: Dice 1.5 cups yellow onion into veggie bowl
   parent prepare-rice-cooker-press-start  # Prepare rice in rice cooker and press start
+
+node saute-sliced-sausage-until-lightly-browned: Saute sliced sausage until lightly browned
+  parent slice-andouille-sausage  # Slice 12 ounces Andouille sausage
+
+node simmer-chicken-until-fully-cooked: Simmer chicken until fully cooked, 20-25 minutes
+  parent bring-water-to-boil  # Bring water to boil
+
+node drain-2-cans-total-diced-canned-tomatoes-give: Drain 2 cans (28 oz total) diced canned tomatoes, give to Curt
+  parent give-veggie-bowl-curt  # Give veggie bowl to Curt
+
+node add-tomatoes-sausage-gumbo-pot: Add tomatoes and sausage to gumbo pot
+  parent add-veggies-gumbo-pot-saute-until-tender  # Add veggies to gumbo pot and saute until tender, about 8-10...
+  parent saute-sliced-sausage-until-lightly-browned  # Saute sliced sausage until lightly browned
+  parent simmer-chicken-until-fully-cooked  # Simmer chicken until fully cooked, 20-25 minutes
+  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes, give to Curt
+
+node cook-for-stirring-occasionally: Cook for 10 minutes, stirring occasionally.
+  parent add-tomatoes-sausage-gumbo-pot  # Add tomatoes and sausage to gumbo pot
+
+node add-contents-spice-bowl-gumbo-pot: Add contents of spice bowl to gumbo pot
+  parent cook-for-stirring-occasionally  # Cook for 10 minutes, stirring occasionally.
+  parent give-spice-bowl-curt  # Give spice bowl to Curt
+
+node add-reserved-chicken-water-gumbo-pot-simmer-loosely: Add 4 cups of reserved chicken water to gumbo pot and simmer for 30 minutes loosely covered, stirring occasionally
+  parent add-contents-spice-bowl-gumbo-pot  # Add contents of spice bowl to gumbo pot
+  parent remove-chicken-reserve-water  # Remove chicken and RESERVE WATER
+
+node add-chicken: Add chicken
+  parent add-reserved-chicken-water-gumbo-pot-simmer-loosely  # Add 4 cups of reserved chicken water to gumbo pot and simmer...
+  parent shred-cut-chicken-small-pieces-give-curt  # Shred or cut chicken into small pieces, give to Curt
+
+node simmer-an-additional: Simmer an additional 15 minutes
+  parent add-chicken  # Add chicken
+
+node turn-off-heat: Turn off heat
+  parent simmer-an-additional  # Simmer an additional 15 minutes
+
+node slow-stir-gumbo-file: Slow stir in 1 TBSP gumbo file
+  parent turn-off-heat  # Turn off heat
+
+node server-over-steamed-rice: Serve over steamed rice
+  parent prepare-rice-cooker-press-start  # Prepare rice in rice cooker and press start
+  parent slow-stir-gumbo-file  # Slow stir in 1 TBSP gumbo file
+
+node add-cayenne-spice-bowl: Add 1 tsp cayenne to spice bowl
+  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes, give to Curt
+
+node add-one-bay-leaf-spice-bowl: Add one bay leaf to spice bowl
+  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes, give to Curt
+
+node add-salt-spice-bowl: Add 1 tsp salt to spice bowl
+  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes, give to Curt
+
+node add-basil-spice-bowl: Add 1 tsp basil to spice bowl
+  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes, give to Curt
+
+node add-black-pepper-spice-bowl: Add 1/2 tsp black pepper to spice bowl
+  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes, give to Curt
+
+node add-thyme-spice-bowl: Add 1 tsp thyme to spice bowl
+  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes, give to Curt
+
+node give-spice-bowl-curt: Give spice bowl to Curt
+  parent add-cayenne-spice-bowl  # Add 1 tsp cayenne to spice bowl
+  parent add-one-bay-leaf-spice-bowl  # Add one bay leaf to spice bowl
+  parent add-salt-spice-bowl  # Add 1 tsp salt to spice bowl
+  parent add-basil-spice-bowl  # Add 1 tsp basil to spice bowl
+  parent add-black-pepper-spice-bowl  # Add 1/2 tsp black pepper to spice bowl
+  parent add-thyme-spice-bowl  # Add 1 tsp thyme to spice bowl
+
+node remove-chicken-reserve-water: Remove chicken and RESERVE WATER
+  parent simmer-chicken-until-fully-cooked  # Simmer chicken until fully cooked, 20-25 minutes
+  parent give-spice-bowl-curt  # Give spice bowl to Curt
+
+node shred-cut-chicken-small-pieces-give-curt: Shred or cut chicken into small pieces, give to Curt
+  parent remove-chicken-reserve-water  # Remove chicken and RESERVE WATER

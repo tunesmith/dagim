@@ -21,9 +21,10 @@ type Graph struct {
 }
 
 type Stats struct {
-	Nodes int
-	Edges int
-	Roots int
+	Nodes  int
+	Edges  int
+	Roots  int
+	Leaves int
 }
 
 var (
@@ -237,6 +238,22 @@ func (g *Graph) Roots() []NodeID {
 	return roots
 }
 
+func (g *Graph) Leaves() []NodeID {
+	childCounts := make(map[NodeID]int, len(g.nodes))
+	for _, parents := range g.parents {
+		for parent := range parents {
+			childCounts[parent]++
+		}
+	}
+	leaves := make([]NodeID, 0)
+	for _, id := range g.order {
+		if childCounts[id] == 0 {
+			leaves = append(leaves, id)
+		}
+	}
+	return leaves
+}
+
 func (g *Graph) MoveEarlier(id NodeID) bool {
 	return g.move(id, -1)
 }
@@ -270,7 +287,7 @@ func (g *Graph) Stats() Stats {
 	for _, parents := range g.parents {
 		edges += len(parents)
 	}
-	return Stats{Nodes: len(g.nodes), Edges: edges, Roots: len(g.Roots())}
+	return Stats{Nodes: len(g.nodes), Edges: edges, Roots: len(g.Roots()), Leaves: len(g.Leaves())}
 }
 
 func (g *Graph) Validate() error {

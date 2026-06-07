@@ -20,6 +20,7 @@ const (
 	modePrompt
 	modeSearch
 	modeRoots
+	modeLeaves
 	modeSequence
 	modeInspect
 	modeConfirmDelete
@@ -63,6 +64,8 @@ type Model struct {
 	seqReturn    mode
 	inspectID    graph.NodeID
 	rootsCursor  int
+	leavesCursor int
+	leavesReturn mode
 	searchCursor int
 
 	dirty   bool

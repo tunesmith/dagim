@@ -32,6 +32,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateSearch(msg)
 		case modeRoots:
 			return m.updateRoots(msg)
+		case modeLeaves:
+			return m.updateLeaves(msg)
 		case modeSequence:
 			return m.updateSequence(msg)
 		case modeInspect:
@@ -133,6 +135,11 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "f":
 		m.mode = modeRoots
 		m.rootsCursor = 0
+	case "l":
+		m.previous = modeNode
+		m.leavesReturn = modeNode
+		m.mode = modeLeaves
+		m.leavesCursor = 0
 	case "J":
 		if m.g.MoveLater(m.current) {
 			m.dirty = true
@@ -310,6 +317,9 @@ func (m Model) updateRoots(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "enter":
 		if len(roots) > 0 {
+			if m.rootsCursor >= len(roots) {
+				m.rootsCursor = len(roots) - 1
+			}
 			m.current = roots[m.rootsCursor]
 			m.cursor = 0
 			m.mode = modeNode
@@ -325,6 +335,11 @@ func (m Model) updateRoots(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "/":
 		return m.setSearch()
+	case "l":
+		m.previous = modeRoots
+		m.leavesReturn = modeRoots
+		m.mode = modeLeaves
+		m.leavesCursor = 0
 	case "m":
 		m.seq = graph.NewSequence(m.g)
 		m.previous = modeRoots
@@ -339,6 +354,58 @@ func (m Model) updateRoots(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "q", "ctrl+c":
 		if m.dirty {
 			m.previous = modeRoots
+			m.mode = modeConfirmQuit
+			return m, nil
+		}
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	leaves := m.g.Leaves()
+	switch msg.String() {
+	case "esc":
+		m.mode = m.leavesReturn
+	case "j", "down":
+		if m.leavesCursor < len(leaves)-1 {
+			m.leavesCursor++
+		}
+	case "k", "up":
+		if m.leavesCursor > 0 {
+			m.leavesCursor--
+		}
+	case "enter":
+		if len(leaves) > 0 {
+			if m.leavesCursor >= len(leaves) {
+				m.leavesCursor = len(leaves) - 1
+			}
+			m.current = leaves[m.leavesCursor]
+			m.cursor = 0
+			m.mode = modeNode
+		}
+	case "i":
+		if len(leaves) > 0 {
+			if m.leavesCursor >= len(leaves) {
+				m.leavesCursor = len(leaves) - 1
+			}
+			m.inspectID = leaves[m.leavesCursor]
+			m.previous = modeLeaves
+			m.mode = modeInspect
+		}
+	case "/":
+		return m.setSearch()
+	case "f":
+		m.mode = modeRoots
+		m.rootsCursor = 0
+	case "w":
+		m = m.save()
+	case "?":
+		m.previous = modeLeaves
+		m.mode = modeHelp
+	case "q":
+		if m.dirty {
+			m.previous = modeLeaves
 			m.mode = modeConfirmQuit
 			return m, nil
 		}

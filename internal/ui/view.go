@@ -29,6 +29,8 @@ func (m Model) View() string {
 		body = m.viewSearch()
 	case modeRoots:
 		body = m.viewRoots()
+	case modeLeaves:
+		body = m.viewLeaves()
 	case modeSequence:
 		body = m.viewSequence()
 	case modeInspect:
@@ -113,9 +115,9 @@ func (m Model) viewNode() string {
 	b.WriteByte('\n')
 	b.WriteString(commandStyle.Render("i inspect     r rename        d delete       / search"))
 	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("f roots       m sequence      J/K reorder    w save"))
+	b.WriteString(commandStyle.Render("f roots       l leaves        m sequence    w save"))
 	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("R rewrite     q quit          ? help"))
+	b.WriteString(commandStyle.Render("J/K reorder   R rewrite       q quit        ? help"))
 	return b.String()
 }
 
@@ -198,7 +200,32 @@ func (m Model) viewRoots() string {
 	b.WriteString("\n")
 	b.WriteString(commandStyle.Render("a add node    Enter focus    i inspect    / search"))
 	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("m sequence    w save         q quit       ? help"))
+	b.WriteString(commandStyle.Render("l leaves      m sequence     w save"))
+	b.WriteByte('\n')
+	b.WriteString(commandStyle.Render("q quit        ? help"))
+	return b.String()
+}
+
+func (m Model) viewLeaves() string {
+	leaves := m.g.Leaves()
+	var b strings.Builder
+	b.WriteString(titleStyle.Render("Leaves"))
+	b.WriteByte('\n')
+	b.WriteString(m.rule())
+	b.WriteByte('\n')
+	if len(leaves) == 0 {
+		b.WriteString(mutedStyle.Render("  no leaves"))
+	} else {
+		for i, id := range leaves {
+			node, _ := m.g.Node(id)
+			b.WriteString(m.renderSelectable(i == m.leavesCursor, node.Text))
+			b.WriteByte('\n')
+		}
+	}
+	b.WriteString("\n")
+	b.WriteString(commandStyle.Render("Enter focus    i inspect    / search    f roots"))
+	b.WriteByte('\n')
+	b.WriteString(commandStyle.Render("w save         q quit       ? help      Esc back"))
 	return b.String()
 }
 
@@ -314,8 +341,8 @@ func (m Model) viewHelp() string {
 		"a add node        p add/link parent    c add/link child",
 		"x unlink          i inspect            r rename",
 		"d delete          / search             f roots",
-		"m sequence        J/K reorder          w save",
-		"R rewrite file    q quit",
+		"l leaves          m sequence           J/K reorder",
+		"w save            R rewrite file       q quit",
 		"ctrl+c force quit ctrl+z suspend",
 		"",
 		"In parent/child prompts, Enter links the selected match and Ctrl+N creates the typed text.",

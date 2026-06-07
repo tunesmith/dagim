@@ -68,6 +68,7 @@ func runCheck(path string) error {
 	fmt.Printf("nodes: %d\n", result.Stats.Nodes)
 	fmt.Printf("edges: %d\n", result.Stats.Edges)
 	fmt.Printf("roots: %d\n", result.Stats.Roots)
+	fmt.Printf("leaves: %d\n", result.Stats.Leaves)
 	if result.IsCanonical {
 		fmt.Println("canonical: yes")
 	} else {

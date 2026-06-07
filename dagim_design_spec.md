@@ -50,7 +50,7 @@ Version 1 should support:
 11. Search and keyboard navigation across node text.
 12. A readable, git-friendly plain-text file format.
 13. Useful diffs for common changes.
-14. A roots view showing nodes with no parents.
+14. Roots and leaves views showing nodes with no parents or no children.
 15. A manual sequencing mode based on “show currently unblocked nodes, user picks one, repeat.”
 
 ## 4. Non-goals for Version 1
@@ -418,7 +418,7 @@ Do not implement optional later options unless the version 1 implementation is a
 
 1. Parse the file.
 2. Validate node IDs, parent references, duplicate edges, and cycles.
-3. Print useful graph stats on success, such as node count, edge count, and root count.
+3. Print useful graph stats on success, such as node count, edge count, root count, and leaf count.
 4. Report whether the file differs from canonical formatting, without modifying it.
 5. Exit nonzero on parse, validation, or canonical-format errors if a strict/check mode is later added; v1 may exit zero for valid but noncanonical files if it clearly reports the formatting status.
 
@@ -435,8 +435,9 @@ Primary views:
 1. Node view.
 2. Search/jump view.
 3. Roots view.
-4. Manual sequence mode.
-5. Help/command view.
+4. Leaves view.
+5. Manual sequence mode.
+6. Help/command view.
 
 When opening a non-empty graph, the TUI should start in the roots view. Empty files should start in the empty node state so the first action is still `a` to add a node.
 
@@ -472,8 +473,8 @@ Commands
 ────────────────────────────────────────
 a add node    p add parent    c add child    x unlink
 i inspect     r rename        d delete       / search
-f roots       m sequence      J/K reorder    w save
-R rewrite     q quit          ? help
+f roots       l leaves        m sequence    w save
+J/K reorder   R rewrite       q quit        ? help
 ```
 
 ### 11.1 Node View Behavior
@@ -491,8 +492,9 @@ The user should be able to:
 9. Search all nodes by text.
 10. Inspect a node to see details such as its ID.
 11. Save.
+12. View roots and leaves.
 
-Normal node, roots, search, and sequence lists should show node text without inline IDs. Long node text should wrap to the terminal width. Node IDs should be available through inspect views, not through the main scanning surfaces.
+Normal node, roots, leaves, search, and sequence lists should show node text without inline IDs. Long node text should wrap to the terminal width. Node IDs should be available through inspect views, not through the main scanning surfaces.
 
 ### 11.2 Suggested Keybindings
 
@@ -512,6 +514,7 @@ i             inspect selected node, or current node if no relationship is selec
 r             rename current node
 d             delete current node, with confirmation if it has edges
 f             show roots view
+l             show leaves view
 J / K         move current node later/earlier in file order
 m             enter manual sequence mode
 w             write/save file
@@ -667,6 +670,33 @@ Rules:
 9. Roots view does not need a generic back-to-node command; entering node view should be an explicit `Enter` action on the selected root.
 
 This view is distinct from manual sequence mode's dynamic frontier. Roots are a property of the graph. The sequence frontier is a property of temporary sequencing state.
+
+## 16.5 Leaves View
+
+The leaves view shows all nodes in the actual graph that currently have no children.
+
+Example:
+
+```text
+Leaves
+────────────────────────────────────────
+  Terminal DAG editor experiment
+  Publish first release
+```
+
+This view is useful because leaves often indicate graph endpoints: places where a brainstorming graph may be complete, or places where more child nodes may need to be added.
+
+Rules:
+
+1. Display leaves in file order.
+2. Do not automatically linearize the graph.
+3. Enter focuses a selected node.
+4. `f` switches to roots view.
+5. Search/filter may be available.
+6. Inspect should expose IDs without showing IDs inline in the leaves list.
+7. Esc returns to the view that opened leaves.
+
+Leaves are a property of the graph. A node is a leaf only because it currently has no children; it is not a distinct node type.
 
 ## 17. Manual Sequence Mode
 
@@ -907,7 +937,17 @@ roots = nodes where parents[node] is empty
 
 Display roots in file order.
 
-### 19.3 Manual Sequence
+### 19.3 Leaves
+
+A leaf is any node with zero children.
+
+```text
+leaves = nodes where children[node] is empty
+```
+
+Display leaves in file order.
+
+### 19.4 Manual Sequence
 
 Manual sequence mode is a user-directed topological traversal.
 
@@ -1150,9 +1190,11 @@ C -> A
 
 is rejected with a clear message.
 
-### 25.12 Roots View
+### 25.12 Roots And Leaves Views
 
 The user starts on roots for a non-empty graph, can view all nodes with no parents, can add a new node, and can enter manual sequence mode.
+
+The user can open leaves and view all nodes with no children, then focus a selected leaf.
 
 ### 25.13 Search
 
@@ -1164,7 +1206,7 @@ The user can move a node earlier or later in persistent file order without chang
 
 ### 25.15 Check Command
 
-`dagim --check FILE` validates the file without opening the TUI and prints useful graph stats on success.
+`dagim --check FILE` validates the file without opening the TUI and prints useful graph stats, including roots and leaves, on success.
 
 ### 25.16 Rewrite Command
 
@@ -1237,7 +1279,8 @@ The user can export the current or completed manual sequence as one node per lin
 10. Cycle rejected.
 11. Unlink edge.
 12. Roots computed correctly.
-13. Reorder node earlier/later changes file order only.
+13. Leaves computed correctly.
+14. Reorder node earlier/later changes file order only.
 
 ### 26.4 Manual Sequence Tests
 
