@@ -196,9 +196,9 @@ func (m Model) viewRoots() string {
 		}
 	}
 	b.WriteString("\n")
-	b.WriteString(commandStyle.Render("a add root    Enter focus    i inspect    / search"))
+	b.WriteString(commandStyle.Render("a add node    Enter focus    i inspect    / search"))
 	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("w save        q quit         ? help"))
+	b.WriteString(commandStyle.Render("m sequence    w save         q quit       ? help"))
 	return b.String()
 }
 
@@ -247,7 +247,9 @@ func (m Model) viewSequence() string {
 		}
 	}
 	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("Space pick    Enter inspect    u undo    r reset    e export    Esc exit"))
+	b.WriteString(commandStyle.Render("Space pick    Enter inspect    u undo    r reset"))
+	b.WriteByte('\n')
+	b.WriteString(commandStyle.Render("e export      Esc/q exit"))
 	return b.String()
 }
 
@@ -314,6 +316,7 @@ func (m Model) viewHelp() string {
 		"d delete          / search             f roots",
 		"m sequence        J/K reorder          w save",
 		"R rewrite file    q quit",
+		"ctrl+c force quit ctrl+z suspend",
 		"",
 		"In parent/child prompts, Enter links the selected match and Ctrl+N creates the typed text.",
 		"Manual sequence is temporary; export writes one node text per line.",

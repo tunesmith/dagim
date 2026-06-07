@@ -95,6 +95,62 @@ func TestInspectReturnsToPreviousMode(t *testing.T) {
 	}
 }
 
+func TestCtrlCQuitsFromAnyMode(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+
+	for _, tc := range []struct {
+		name string
+		m    Model
+	}{
+		{name: "node", m: func() Model {
+			m := New("test.dagim", g)
+			m.mode = modeNode
+			return m
+		}()},
+		{name: "roots", m: New("test.dagim", g)},
+		{name: "sequence", m: func() Model {
+			m := New("test.dagim", g)
+			m.mode = modeSequence
+			m.seq = graph.NewSequence(g)
+			m.seqReturn = modeRoots
+			return m
+		}()},
+		{name: "prompt", m: func() Model {
+			m := New("test.dagim", g)
+			m.mode = modePrompt
+			return m
+		}()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, cmd := tc.m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+			if cmd == nil {
+				t.Fatal("cmd is nil")
+			}
+			if _, ok := cmd().(tea.QuitMsg); !ok {
+				t.Fatalf("expected QuitMsg")
+			}
+		})
+	}
+}
+
+func TestCtrlZSuspendsFromAnyMode(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	m := New("test.dagim", g)
+	m.mode = modeSequence
+	m.seq = graph.NewSequence(g)
+	m.seqReturn = modeRoots
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlZ})
+	if cmd == nil {
+		t.Fatal("cmd is nil")
+	}
+	if _, ok := cmd().(tea.SuspendMsg); !ok {
+		t.Fatalf("expected SuspendMsg")
+	}
+}
+
 func TestNewStartsOnRootsForNonEmptyGraph(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
@@ -125,7 +181,7 @@ func TestNewStartsEmptyGraphInNodeMode(t *testing.T) {
 	}
 }
 
-func TestRootsCanOpenAddRootPrompt(t *testing.T) {
+func TestRootsCanOpenAddNodePrompt(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	m := New("test.dagim", g)
@@ -141,6 +197,103 @@ func TestRootsCanOpenAddRootPrompt(t *testing.T) {
 	}
 	if updated.promptAction != promptAddNode {
 		t.Fatalf("promptAction = %v", updated.promptAction)
+	}
+	if updated.promptTitle != "Add node" {
+		t.Fatalf("promptTitle = %q", updated.promptTitle)
+	}
+}
+
+func TestRootsCanStartSequence(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	m := New("test.dagim", g)
+
+	next, _ := m.Update(runeKey('m'))
+	updated := next.(Model)
+
+	if updated.mode != modeSequence {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+	if updated.previous != modeRoots {
+		t.Fatalf("previous = %v", updated.previous)
+	}
+	if updated.seqReturn != modeRoots {
+		t.Fatalf("seqReturn = %v", updated.seqReturn)
+	}
+	if updated.seq == nil {
+		t.Fatal("seq is nil")
+	}
+}
+
+func TestSequenceEscReturnsToLaunchingMode(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	m := New("test.dagim", g)
+
+	next, _ := m.Update(runeKey('m'))
+	sequencing := next.(Model)
+	next, _ = sequencing.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated := next.(Model)
+
+	if updated.mode != modeRoots {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+}
+
+func TestSequenceInspectDoesNotLoseRootsReturnMode(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	m := New("test.dagim", g)
+
+	next, _ := m.Update(runeKey('m'))
+	sequencing := next.(Model)
+	next, _ = sequencing.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	inspecting := next.(Model)
+	if inspecting.mode != modeInspect {
+		t.Fatalf("mode = %v", inspecting.mode)
+	}
+
+	next, _ = inspecting.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	sequencing = next.(Model)
+	if sequencing.mode != modeSequence {
+		t.Fatalf("mode = %v", sequencing.mode)
+	}
+
+	next, _ = sequencing.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated := next.(Model)
+	if updated.mode != modeRoots {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+}
+
+func TestSequenceQReturnsToLaunchingMode(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	m := New("test.dagim", g)
+
+	next, _ := m.Update(runeKey('m'))
+	sequencing := next.(Model)
+	next, _ = sequencing.Update(runeKey('q'))
+	updated := next.(Model)
+
+	if updated.mode != modeRoots {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+}
+
+func TestNodeSequenceEscReturnsToNode(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	m := New("test.dagim", g)
+	m.mode = modeNode
+
+	next, _ := m.Update(runeKey('m'))
+	sequencing := next.(Model)
+	next, _ = sequencing.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated := next.(Model)
+
+	if updated.mode != modeNode {
+		t.Fatalf("mode = %v", updated.mode)
 	}
 }
 

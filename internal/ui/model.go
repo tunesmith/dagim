@@ -60,6 +60,7 @@ type Model struct {
 	suggestionCursor int
 
 	seq          *graph.Sequence
+	seqReturn    mode
 	inspectID    graph.NodeID
 	rootsCursor  int
 	searchCursor int

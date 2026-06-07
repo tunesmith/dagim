@@ -17,6 +17,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyMsg:
 		m.message = ""
+		switch msg.String() {
+		case "ctrl+c":
+			return m, tea.Quit
+		case "ctrl+z":
+			return m, tea.Suspend
+		}
 		switch m.mode {
 		case modeNode:
 			return m.updateNode(msg)
@@ -137,6 +143,8 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "m":
 		m.seq = graph.NewSequence(m.g)
+		m.previous = modeNode
+		m.seqReturn = modeNode
 		m.mode = modeSequence
 		m.cursor = 0
 	case "w":
@@ -291,7 +299,7 @@ func (m Model) updateRoots(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	roots := m.g.Roots()
 	switch msg.String() {
 	case "a":
-		return m.setPrompt(promptAddNode, "Add root node", "")
+		return m.setPrompt(promptAddNode, "Add node", "")
 	case "j", "down":
 		if m.rootsCursor < len(roots)-1 {
 			m.rootsCursor++
@@ -317,6 +325,12 @@ func (m Model) updateRoots(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "/":
 		return m.setSearch()
+	case "m":
+		m.seq = graph.NewSequence(m.g)
+		m.previous = modeRoots
+		m.seqReturn = modeRoots
+		m.mode = modeSequence
+		m.cursor = 0
 	case "w":
 		m = m.save()
 	case "?":
@@ -339,8 +353,8 @@ func (m Model) updateSequence(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	available := m.seq.Available()
 	switch msg.String() {
-	case "esc":
-		m.mode = modeNode
+	case "esc", "q":
+		m.mode = m.seqReturn
 	case "j", "down":
 		if m.cursor < len(available)-1 {
 			m.cursor++

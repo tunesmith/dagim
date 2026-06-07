@@ -446,7 +446,7 @@ The core capture loop should emphasize defining graph relationships while ideas 
 2. From a selected node, add or link a parent quickly.
 3. From a selected node, add or link a child quickly.
 4. When adding a parent or child, select an existing node through search/autocomplete or create a new node from the prompt.
-5. Support adding many top-level/root nodes first, but do not make "bulk capture now, link later" the only efficient workflow.
+5. Support adding many unlinked beginning nodes first, but do not make "bulk capture now, link later" the only efficient workflow.
 
 ## 11. Node View
 
@@ -518,6 +518,8 @@ w             write/save file
 R             rewrite file: regenerate IDs, update references, save canonical format
 ?             help
 q             quit, prompting if unsaved changes exist
+ctrl+c        force quit immediately
+ctrl+z        suspend to shell
 ```
 
 ## 12. Add and Link Behavior
@@ -658,10 +660,11 @@ Rules:
 2. Open here by default for non-empty graphs.
 3. Do not automatically linearize the graph.
 4. Enter focuses a selected node.
-5. `a` adds a new top-level/root node.
-6. Search/filter may be available.
-7. Inspect should expose IDs without showing IDs inline in the root list.
-8. Roots view does not need a generic back-to-node command; entering node view should be an explicit `Enter` action on the selected root.
+5. `a` adds a new unlinked node; because it has no parents, it appears in roots until linked.
+6. `m` enters manual sequence mode.
+7. Search/filter may be available.
+8. Inspect should expose IDs without showing IDs inline in the root list.
+9. Roots view does not need a generic back-to-node command; entering node view should be an explicit `Enter` action on the selected root.
 
 This view is distinct from manual sequence mode's dynamic frontier. Roots are a property of the graph. The sequence frontier is a property of temporary sequencing state.
 
@@ -680,6 +683,8 @@ Manual sequence mode is entered from inside the TUI, for example with:
 ```text
 m
 ```
+
+It should be available from both node view and roots view.
 
 There should not be a required separate CLI command for version 1.
 
@@ -728,7 +733,8 @@ Available now
 
 Commands
 ────────────────────────────────────────
-Space pick    Enter inspect    u undo    r reset    e export    Esc exit
+Space pick    Enter inspect    u undo    r reset
+e export      Esc/q exit
 ```
 
 The mode does not need to display “still blocked” by default. That can make the interface heavier and more like an analysis dashboard. Users should be able to inspect available nodes and temporarily drill into their parent/child neighborhoods if needed.
@@ -810,7 +816,7 @@ Sequence complete
 
 Commands
 ────────────────────────────────────────
-e export    u undo    r reset    Esc exit
+e export    u undo    r reset    Esc/q exit
 ```
 
 ### 17.10 Exporting the Sequence
@@ -1020,11 +1026,13 @@ Save behavior:
 
 ### 22.3 Quit
 
-If quitting with unsaved changes, prompt:
+If quitting with `q` and there are unsaved changes, prompt:
 
 ```text
 Unsaved changes. Save before quitting? [y]es / [n]o / [c]ancel
 ```
+
+`ctrl+c` should always force quit from any mode without prompting. `ctrl+z` should suspend to the shell from any mode, matching normal terminal expectations for a raw-mode TUI.
 
 ## 23. Error Handling
 
@@ -1144,7 +1152,7 @@ is rejected with a clear message.
 
 ### 25.12 Roots View
 
-The user starts on roots for a non-empty graph and can view all nodes with no parents.
+The user starts on roots for a non-empty graph, can view all nodes with no parents, can add a new node, and can enter manual sequence mode.
 
 ### 25.13 Search
 
