@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -133,12 +134,12 @@ func TestCtrlCQuitsFromAnyMode(t *testing.T) {
 			m.mode = modeNode
 			return m
 		}()},
-		{name: "roots", m: New("test.dagim", g)},
-		{name: "sequence", m: func() Model {
+		{name: "ready", m: New("test.dagim", g)},
+		{name: "order", m: func() Model {
 			m := New("test.dagim", g)
-			m.mode = modeSequence
-			m.seq = graph.NewSequence(g)
-			m.seqReturn = modeRoots
+			m.mode = modeOrder
+			m.order = graph.NewOrder(g)
+			m.orderReturn = modeReady
 			return m
 		}()},
 		{name: "prompt", m: func() Model {
@@ -163,9 +164,9 @@ func TestCtrlZSuspendsFromAnyMode(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	m := New("test.dagim", g)
-	m.mode = modeSequence
-	m.seq = graph.NewSequence(g)
-	m.seqReturn = modeRoots
+	m.mode = modeOrder
+	m.order = graph.NewOrder(g)
+	m.orderReturn = modeReady
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlZ})
 	if cmd == nil {
@@ -176,7 +177,7 @@ func TestCtrlZSuspendsFromAnyMode(t *testing.T) {
 	}
 }
 
-func TestNewStartsOnRootsForNonEmptyGraph(t *testing.T) {
+func TestNewStartsOnReadyForNonEmptyGraph(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	must(t, g.AddNodeWithID("child-node", "Child node"))
@@ -184,14 +185,14 @@ func TestNewStartsOnRootsForNonEmptyGraph(t *testing.T) {
 
 	m := New("test.dagim", g)
 
-	if m.mode != modeRoots {
+	if m.mode != modeReady {
 		t.Fatalf("mode = %v", m.mode)
 	}
 	if m.current != "root-node" {
 		t.Fatalf("current = %q", m.current)
 	}
-	if view := m.View(); !strings.Contains(view, "Roots") || !strings.Contains(view, "Root node") {
-		t.Fatalf("expected roots view on startup:\n%s", view)
+	if view := m.View(); !strings.Contains(view, "Ready") || !strings.Contains(view, "Root node") {
+		t.Fatalf("expected ready view on startup:\n%s", view)
 	}
 }
 
@@ -229,7 +230,7 @@ func TestNodeCanOpenEditPrompt(t *testing.T) {
 	}
 }
 
-func TestNodeCanOpenRootsViewWithR(t *testing.T) {
+func TestNodeCanOpenReadyViewWithR(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	m := New("test.dagim", g)
@@ -238,8 +239,64 @@ func TestNodeCanOpenRootsViewWithR(t *testing.T) {
 	next, _ := m.Update(runeKey('r'))
 	updated := next.(Model)
 
-	if updated.mode != modeRoots {
+	if updated.mode != modeReady {
 		t.Fatalf("mode = %v", updated.mode)
+	}
+}
+
+func TestNodeReordersSelectedChildWithinChildren(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("current", "Current"))
+	must(t, g.AddNodeWithID("first-child", "First child"))
+	must(t, g.AddNodeWithID("unrelated", "Unrelated"))
+	must(t, g.AddNodeWithID("second-child", "Second child"))
+	must(t, g.AddEdge("current", "first-child"))
+	must(t, g.AddEdge("current", "second-child"))
+	m := New("test.dagim", g)
+	m.mode = modeNode
+	m.current = "current"
+
+	next, _ := m.Update(runeKey('J'))
+	updated := next.(Model)
+	children, _ := updated.g.ChildrenOf("current")
+	if !reflect.DeepEqual(children, []graph.NodeID{"second-child", "first-child"}) {
+		t.Fatalf("children after J = %#v", children)
+	}
+	if updated.cursor != 1 {
+		t.Fatalf("cursor after J = %d", updated.cursor)
+	}
+	if !updated.dirty {
+		t.Fatal("reorder should dirty the graph")
+	}
+
+	next, _ = updated.Update(runeKey('K'))
+	updated = next.(Model)
+	children, _ = updated.g.ChildrenOf("current")
+	if !reflect.DeepEqual(children, []graph.NodeID{"first-child", "second-child"}) {
+		t.Fatalf("children after K = %#v", children)
+	}
+	if updated.cursor != 0 {
+		t.Fatalf("cursor after K = %d", updated.cursor)
+	}
+}
+
+func TestNodeReorderDoesNothingWithoutVisibleRelation(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("current", "Current"))
+	must(t, g.AddNodeWithID("other", "Other"))
+	m := New("test.dagim", g)
+	m.mode = modeNode
+	m.current = "current"
+	before := g.Order()
+
+	next, _ := m.Update(runeKey('J'))
+	updated := next.(Model)
+
+	if !reflect.DeepEqual(updated.g.Order(), before) {
+		t.Fatalf("order changed without a visible relation: %#v", updated.g.Order())
+	}
+	if updated.dirty {
+		t.Fatal("invisible no-op reorder should not dirty the graph")
 	}
 }
 
@@ -277,7 +334,134 @@ func TestSaveUsesSKey(t *testing.T) {
 	}
 }
 
-func TestRootsCanOpenAddNodePrompt(t *testing.T) {
+func TestReadyReordersHighlightedNode(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("first", "First"))
+	must(t, g.AddNodeWithID("second", "Second"))
+	must(t, g.AddNodeWithID("third", "Third"))
+	m := New("test.dagim", g)
+
+	next, _ := m.Update(runeKey('J'))
+	updated := next.(Model)
+
+	if got := updated.g.Ready(); !reflect.DeepEqual(got, []graph.NodeID{"second", "first", "third"}) {
+		t.Fatalf("ready after J = %#v", got)
+	}
+	if updated.readyCursor != 1 {
+		t.Fatalf("readyCursor after J = %d", updated.readyCursor)
+	}
+	if !updated.dirty {
+		t.Fatal("ready reorder should dirty the graph")
+	}
+
+	next, _ = updated.Update(runeKey('K'))
+	updated = next.(Model)
+	if got := updated.g.Ready(); !reflect.DeepEqual(got, []graph.NodeID{"first", "second", "third"}) {
+		t.Fatalf("ready after K = %#v", got)
+	}
+	if updated.readyCursor != 0 {
+		t.Fatalf("readyCursor after K = %d", updated.readyCursor)
+	}
+}
+
+func TestReadyMarksCompleteAndAdvances(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("a", "A"))
+	must(t, g.AddNodeWithID("b", "B"))
+	must(t, g.AddNodeWithID("c", "C"))
+	must(t, g.AddEdge("a", "c"))
+	must(t, g.AddEdge("b", "c"))
+	m := New("test.dagim", g)
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	updated := next.(Model)
+	node, _ := updated.g.Node("a")
+	if !node.Complete {
+		t.Fatal("selected ready node was not marked complete")
+	}
+	if got := updated.g.Ready(); !reflect.DeepEqual(got, []graph.NodeID{"b"}) {
+		t.Fatalf("ready = %#v", got)
+	}
+
+	next, _ = updated.Update(tea.KeyMsg{Type: tea.KeySpace})
+	updated = next.(Model)
+	if got := updated.g.Ready(); !reflect.DeepEqual(got, []graph.NodeID{"c"}) {
+		t.Fatalf("ready after completing b = %#v", got)
+	}
+}
+
+func TestReadyCanShowCompletedAndMarkIncomplete(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("a", "A"))
+	must(t, g.SetComplete("a", true))
+	m := New("test.dagim", g)
+
+	if view := m.View(); strings.Contains(view, "[x] A") {
+		t.Fatalf("completed node shown before toggle:\n%s", view)
+	}
+	next, _ := m.Update(runeKey('v'))
+	updated := next.(Model)
+	if view := updated.View(); !strings.Contains(view, "[x] A") {
+		t.Fatalf("completed node hidden after toggle:\n%s", view)
+	}
+
+	next, _ = updated.Update(tea.KeyMsg{Type: tea.KeySpace})
+	updated = next.(Model)
+	node, _ := updated.g.Node("a")
+	if node.Complete {
+		t.Fatal("completed node was not marked incomplete")
+	}
+	if got := updated.g.Ready(); !reflect.DeepEqual(got, []graph.NodeID{"a"}) {
+		t.Fatalf("ready = %#v", got)
+	}
+}
+
+func TestNodeViewHidesCompletedRelationsUntilToggled(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("parent", "Parent"))
+	must(t, g.AddNodeWithID("current", "Current"))
+	must(t, g.AddEdge("parent", "current"))
+	must(t, g.SetComplete("parent", true))
+	m := New("test.dagim", g)
+	m.mode = modeNode
+	m.current = "current"
+
+	if view := m.viewNode(); strings.Contains(view, "  Parent") || strings.Contains(view, "> Parent") {
+		t.Fatalf("completed parent shown before toggle:\n%s", view)
+	}
+	next, _ := m.Update(runeKey('v'))
+	updated := next.(Model)
+	if view := updated.viewNode(); !strings.Contains(view, "[x] Parent") {
+		t.Fatalf("completed parent hidden after toggle:\n%s", view)
+	}
+}
+
+func TestResetCompletionRequiresConfirm(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("a", "A"))
+	must(t, g.SetComplete("a", true))
+	m := New("test.dagim", g)
+
+	next, _ := m.Update(runeKey('R'))
+	confirming := next.(Model)
+	if confirming.mode != modeConfirmReset {
+		t.Fatalf("mode = %v", confirming.mode)
+	}
+	next, _ = confirming.Update(runeKey('y'))
+	updated := next.(Model)
+	node, _ := updated.g.Node("a")
+	if node.Complete {
+		t.Fatal("completion was not reset")
+	}
+	if !updated.dirty {
+		t.Fatal("reset should dirty the graph")
+	}
+	if updated.mode != modeReady {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+}
+
+func TestReadyCanOpenAddNodePrompt(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	m := New("test.dagim", g)
@@ -288,7 +472,7 @@ func TestRootsCanOpenAddNodePrompt(t *testing.T) {
 	if updated.mode != modePrompt {
 		t.Fatalf("mode = %v", updated.mode)
 	}
-	if updated.previous != modeRoots {
+	if updated.previous != modeReady {
 		t.Fatalf("previous = %v", updated.previous)
 	}
 	if updated.promptAction != promptAddNode {
@@ -299,93 +483,93 @@ func TestRootsCanOpenAddNodePrompt(t *testing.T) {
 	}
 }
 
-func TestRootsCanStartSequence(t *testing.T) {
+func TestReadyCanStartOrder(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	m := New("test.dagim", g)
 
-	next, _ := m.Update(runeKey('m'))
+	next, _ := m.Update(runeKey('o'))
 	updated := next.(Model)
 
-	if updated.mode != modeSequence {
+	if updated.mode != modeOrder {
 		t.Fatalf("mode = %v", updated.mode)
 	}
-	if updated.previous != modeRoots {
+	if updated.previous != modeReady {
 		t.Fatalf("previous = %v", updated.previous)
 	}
-	if updated.seqReturn != modeRoots {
-		t.Fatalf("seqReturn = %v", updated.seqReturn)
+	if updated.orderReturn != modeReady {
+		t.Fatalf("orderReturn = %v", updated.orderReturn)
 	}
-	if updated.seq == nil {
-		t.Fatal("seq is nil")
+	if updated.order == nil {
+		t.Fatal("order is nil")
 	}
 }
 
-func TestSequenceEscReturnsToLaunchingMode(t *testing.T) {
+func TestOrderEscReturnsToLaunchingMode(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	m := New("test.dagim", g)
 
-	next, _ := m.Update(runeKey('m'))
-	sequencing := next.(Model)
-	next, _ = sequencing.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	next, _ := m.Update(runeKey('o'))
+	ordering := next.(Model)
+	next, _ = ordering.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	updated := next.(Model)
 
-	if updated.mode != modeRoots {
+	if updated.mode != modeReady {
 		t.Fatalf("mode = %v", updated.mode)
 	}
 }
 
-func TestSequenceInspectDoesNotLoseRootsReturnMode(t *testing.T) {
+func TestOrderInspectDoesNotLoseReadyReturnMode(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	m := New("test.dagim", g)
 
-	next, _ := m.Update(runeKey('m'))
-	sequencing := next.(Model)
-	next, _ = sequencing.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, _ := m.Update(runeKey('o'))
+	ordering := next.(Model)
+	next, _ = ordering.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	inspecting := next.(Model)
 	if inspecting.mode != modeInspect {
 		t.Fatalf("mode = %v", inspecting.mode)
 	}
 
 	next, _ = inspecting.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	sequencing = next.(Model)
-	if sequencing.mode != modeSequence {
-		t.Fatalf("mode = %v", sequencing.mode)
+	ordering = next.(Model)
+	if ordering.mode != modeOrder {
+		t.Fatalf("mode = %v", ordering.mode)
 	}
 
-	next, _ = sequencing.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	next, _ = ordering.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	updated := next.(Model)
-	if updated.mode != modeRoots {
+	if updated.mode != modeReady {
 		t.Fatalf("mode = %v", updated.mode)
 	}
 }
 
-func TestSequenceQReturnsToLaunchingMode(t *testing.T) {
+func TestOrderQReturnsToLaunchingMode(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	m := New("test.dagim", g)
 
-	next, _ := m.Update(runeKey('m'))
-	sequencing := next.(Model)
-	next, _ = sequencing.Update(runeKey('q'))
+	next, _ := m.Update(runeKey('o'))
+	ordering := next.(Model)
+	next, _ = ordering.Update(runeKey('q'))
 	updated := next.(Model)
 
-	if updated.mode != modeRoots {
+	if updated.mode != modeReady {
 		t.Fatalf("mode = %v", updated.mode)
 	}
 }
 
-func TestNodeSequenceEscReturnsToNode(t *testing.T) {
+func TestNodeOrderEscReturnsToNode(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	m := New("test.dagim", g)
 	m.mode = modeNode
 
-	next, _ := m.Update(runeKey('m'))
-	sequencing := next.(Model)
-	next, _ = sequencing.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	next, _ := m.Update(runeKey('o'))
+	ordering := next.(Model)
+	next, _ = ordering.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	updated := next.(Model)
 
 	if updated.mode != modeNode {
@@ -393,28 +577,28 @@ func TestNodeSequenceEscReturnsToNode(t *testing.T) {
 	}
 }
 
-func TestRootsEscDoesNotEnterNodeView(t *testing.T) {
+func TestReadyEscDoesNotEnterNodeView(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("first-root", "First root"))
 	must(t, g.AddNodeWithID("second-root", "Second root"))
 	m := New("test.dagim", g)
-	m.rootsCursor = 1
+	m.readyCursor = 1
 
 	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	updated := next.(Model)
 
-	if updated.mode != modeRoots {
+	if updated.mode != modeReady {
 		t.Fatalf("mode = %v", updated.mode)
 	}
-	if updated.rootsCursor != 1 {
-		t.Fatalf("rootsCursor = %d", updated.rootsCursor)
+	if updated.readyCursor != 1 {
+		t.Fatalf("readyCursor = %d", updated.readyCursor)
 	}
 	if updated.current != "first-root" {
 		t.Fatalf("current = %q", updated.current)
 	}
 }
 
-func TestRootsSearchEscReturnsToRoots(t *testing.T) {
+func TestReadySearchEscReturnsToReady(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	m := New("test.dagim", g)
@@ -427,12 +611,33 @@ func TestRootsSearchEscReturnsToRoots(t *testing.T) {
 
 	next, _ = searching.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	updated := next.(Model)
-	if updated.mode != modeRoots {
+	if updated.mode != modeReady {
 		t.Fatalf("mode = %v", updated.mode)
 	}
 }
 
-func TestRootsHelpEscReturnsToRoots(t *testing.T) {
+func TestSearchTreatsPrintableKeysAsInput(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("log-into-bank", "Log into bank"))
+	m := New("test.dagim", g)
+
+	next, _ := m.Update(runeKey('/'))
+	searching := next.(Model)
+	query := "Log into bank / q W R v a p c e d i r l o s x J K ?"
+	for _, r := range query {
+		next, _ = searching.Update(runeKey(r))
+		searching = next.(Model)
+	}
+
+	if searching.mode != modeSearch {
+		t.Fatalf("mode = %v", searching.mode)
+	}
+	if searching.input.Value() != query {
+		t.Fatalf("input = %q", searching.input.Value())
+	}
+}
+
+func TestReadyHelpEscReturnsToReady(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	m := New("test.dagim", g)
@@ -445,12 +650,12 @@ func TestRootsHelpEscReturnsToRoots(t *testing.T) {
 
 	next, _ = helping.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	updated := next.(Model)
-	if updated.mode != modeRoots {
+	if updated.mode != modeReady {
 		t.Fatalf("mode = %v", updated.mode)
 	}
 }
 
-func TestRootsQuitCancelReturnsToRoots(t *testing.T) {
+func TestReadyQuitCancelReturnsToReady(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	m := New("test.dagim", g)
@@ -464,7 +669,7 @@ func TestRootsQuitCancelReturnsToRoots(t *testing.T) {
 
 	next, _ = confirming.Update(runeKey('c'))
 	updated := next.(Model)
-	if updated.mode != modeRoots {
+	if updated.mode != modeReady {
 		t.Fatalf("mode = %v", updated.mode)
 	}
 }
@@ -499,7 +704,7 @@ func TestNodeCanOpenLeavesView(t *testing.T) {
 	}
 }
 
-func TestRootsCanOpenLeavesView(t *testing.T) {
+func TestReadyCanOpenLeavesView(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	must(t, g.AddNodeWithID("leaf-node", "Leaf node"))
@@ -512,10 +717,10 @@ func TestRootsCanOpenLeavesView(t *testing.T) {
 	if updated.mode != modeLeaves {
 		t.Fatalf("mode = %v", updated.mode)
 	}
-	if updated.previous != modeRoots {
+	if updated.previous != modeReady {
 		t.Fatalf("previous = %v", updated.previous)
 	}
-	if updated.leavesReturn != modeRoots {
+	if updated.leavesReturn != modeReady {
 		t.Fatalf("leavesReturn = %v", updated.leavesReturn)
 	}
 }
@@ -559,6 +764,39 @@ func TestLeavesEnterClampsStaleCursor(t *testing.T) {
 	}
 	if updated.current != "leaf-node" {
 		t.Fatalf("current = %q", updated.current)
+	}
+}
+
+func TestLeavesReordersHighlightedNode(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	must(t, g.AddNodeWithID("first-leaf", "First leaf"))
+	must(t, g.AddNodeWithID("second-leaf", "Second leaf"))
+	must(t, g.AddEdge("root-node", "first-leaf"))
+	must(t, g.AddEdge("root-node", "second-leaf"))
+	m := New("test.dagim", g)
+	m.mode = modeLeaves
+
+	next, _ := m.Update(runeKey('J'))
+	updated := next.(Model)
+
+	if got := updated.g.Leaves(); !reflect.DeepEqual(got, []graph.NodeID{"second-leaf", "first-leaf"}) {
+		t.Fatalf("leaves after J = %#v", got)
+	}
+	if updated.leavesCursor != 1 {
+		t.Fatalf("leavesCursor after J = %d", updated.leavesCursor)
+	}
+	if !updated.dirty {
+		t.Fatal("leaves reorder should dirty the graph")
+	}
+
+	next, _ = updated.Update(runeKey('K'))
+	updated = next.(Model)
+	if got := updated.g.Leaves(); !reflect.DeepEqual(got, []graph.NodeID{"first-leaf", "second-leaf"}) {
+		t.Fatalf("leaves after K = %#v", got)
+	}
+	if updated.leavesCursor != 0 {
+		t.Fatalf("leavesCursor after K = %d", updated.leavesCursor)
 	}
 }
 
@@ -635,7 +873,7 @@ func TestLeavesSearchEscReturnsToLeaves(t *testing.T) {
 	}
 }
 
-func TestLeavesCanOpenRootsViewWithR(t *testing.T) {
+func TestLeavesCanOpenReadyViewWithR(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	must(t, g.AddNodeWithID("leaf-node", "Leaf node"))
@@ -646,7 +884,7 @@ func TestLeavesCanOpenRootsViewWithR(t *testing.T) {
 	next, _ := m.Update(runeKey('r'))
 	updated := next.(Model)
 
-	if updated.mode != modeRoots {
+	if updated.mode != modeReady {
 		t.Fatalf("mode = %v", updated.mode)
 	}
 }

@@ -23,6 +23,7 @@ func TestParseNodesParentsAndLaterReference(t *testing.T) {
 	g, err := Parse(`# dagim v1
 
 node c: C
+  complete
   parent a  # stale ignored hint
   parent b
 
@@ -39,6 +40,10 @@ node b: B
 	}
 	if !reflect.DeepEqual(parents, []graph.NodeID{"a", "b"}) {
 		t.Fatalf("parents = %#v", parents)
+	}
+	node, _ := g.Node("c")
+	if !node.Complete {
+		t.Fatal("complete line was not parsed")
 	}
 }
 
@@ -68,6 +73,7 @@ func TestParseRejectsInvalidInput(t *testing.T) {
 		"node : A\n",
 		"node a:\n",
 		"  parent a\nnode a: A\n",
+		"  complete\nnode a: A\n",
 		"node a: A\n  parent a\n",
 		"node a: A\n  parent b\n  parent b\nnode b: B\n",
 		"not valid\n",
@@ -99,6 +105,7 @@ func TestSerializeCanonical(t *testing.T) {
 	must(t, g.AddNodeWithID("b", "B"))
 	must(t, g.AddNodeWithID("a", "A"))
 	must(t, g.AddNodeWithID("c", "C"))
+	must(t, g.SetComplete("a", true))
 	must(t, g.AddEdge("a", "c"))
 	must(t, g.AddEdge("b", "c"))
 
@@ -108,6 +115,7 @@ func TestSerializeCanonical(t *testing.T) {
 node b: B
 
 node a: A
+  complete
 
 node c: C
   parent b  # B
@@ -146,7 +154,7 @@ func TestCheckReportsCanonicalFormatting(t *testing.T) {
 	if result.IsCanonical {
 		t.Fatal("expected noncanonical input")
 	}
-	if result.Stats.Nodes != 1 || result.Stats.Edges != 0 || result.Stats.Roots != 1 || result.Stats.Leaves != 1 {
+	if result.Stats.Nodes != 1 || result.Stats.Edges != 0 || result.Stats.Ready != 1 || result.Stats.Roots != 1 || result.Stats.Leaves != 1 {
 		t.Fatalf("stats = %#v", result.Stats)
 	}
 	if result.Canonical != "# dagim v1\n\nnode a: A\n" {

@@ -80,6 +80,16 @@ func Parse(input string) (*graph.Graph, error) {
 				return nil, ParseError{Line: lineNo, Err: err}
 			}
 			refs = append(refs, parentRef{child: current, parent: parent, line: lineNo})
+		case line == "complete" || strings.HasPrefix(line, "complete "):
+			if current == "" {
+				return nil, ParseError{Line: lineNo, Msg: "complete line before first node"}
+			}
+			if err := parseCompleteLine(line); err != nil {
+				return nil, ParseError{Line: lineNo, Err: err}
+			}
+			if err := g.SetComplete(current, true); err != nil {
+				return nil, ParseError{Line: lineNo, Err: err}
+			}
 		default:
 			return nil, ParseError{Line: lineNo, Msg: fmt.Sprintf("malformed line %q", raw)}
 		}
@@ -117,6 +127,9 @@ func Serialize(g *graph.Graph) string {
 		b.WriteString(": ")
 		b.WriteString(node.Text)
 		b.WriteByte('\n')
+		if node.Complete {
+			b.WriteString("  complete\n")
+		}
 		parents, _ := g.ParentsOf(node.ID)
 		for _, parentID := range parents {
 			parent, _ := g.Node(parentID)
@@ -246,4 +259,12 @@ func parseParentLine(line string) (graph.NodeID, error) {
 		return "", fmt.Errorf("invalid parent id %q", id)
 	}
 	return id, nil
+}
+
+func parseCompleteLine(line string) error {
+	rest := strings.TrimSpace(strings.TrimPrefix(line, "complete"))
+	if rest != "" && !strings.HasPrefix(rest, "#") {
+		return fmt.Errorf("unexpected text after complete; use # for optional comment")
+	}
+	return nil
 }

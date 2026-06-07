@@ -19,12 +19,13 @@ const (
 	modeNode mode = iota
 	modePrompt
 	modeSearch
-	modeRoots
+	modeReady
 	modeLeaves
-	modeSequence
+	modeOrder
 	modeInspect
 	modeConfirmDelete
 	modeConfirmRewrite
+	modeConfirmReset
 	modeConfirmQuit
 	modeHelp
 )
@@ -37,13 +38,16 @@ const (
 	promptAddParent
 	promptAddChild
 	promptEdit
-	promptExportSequence
+	promptExportOrder
 )
 
 type relationItem struct {
-	label string
-	id    graph.NodeID
-	kind  string
+	id   graph.NodeID
+	kind string
+}
+
+type completionItem struct {
+	id graph.NodeID
 }
 
 type Model struct {
@@ -60,13 +64,14 @@ type Model struct {
 	promptAction     promptAction
 	suggestionCursor int
 
-	seq          *graph.Sequence
-	seqReturn    mode
-	inspectID    graph.NodeID
-	rootsCursor  int
-	leavesCursor int
-	leavesReturn mode
-	searchCursor int
+	order         *graph.Order
+	orderReturn   mode
+	inspectID     graph.NodeID
+	readyCursor   int
+	leavesCursor  int
+	leavesReturn  mode
+	searchCursor  int
+	showCompleted bool
 
 	dirty   bool
 	message string
@@ -89,7 +94,7 @@ func New(path string, g *graph.Graph) Model {
 	}
 	if nodes := g.Nodes(); len(nodes) > 0 {
 		m.current = nodes[0].ID
-		m.mode = modeRoots
+		m.mode = modeReady
 	}
 	return m
 }
@@ -140,12 +145,18 @@ func (m Model) relationItems() []relationItem {
 	parents, _ := m.g.ParentsOf(m.current)
 	for _, id := range parents {
 		node, _ := m.g.Node(id)
-		items = append(items, relationItem{kind: "parent", id: id, label: node.Text})
+		if node.Complete && !m.showCompleted {
+			continue
+		}
+		items = append(items, relationItem{kind: "parent", id: id})
 	}
 	children, _ := m.g.ChildrenOf(m.current)
 	for _, id := range children {
 		node, _ := m.g.Node(id)
-		items = append(items, relationItem{kind: "child", id: id, label: node.Text})
+		if node.Complete && !m.showCompleted {
+			continue
+		}
+		items = append(items, relationItem{kind: "child", id: id})
 	}
 	return items
 }
@@ -307,6 +318,128 @@ func (m Model) ensureCurrent() Model {
 	return m
 }
 
+func (m Model) readyItems() []completionItem {
+	items := make([]completionItem, 0)
+	for _, id := range m.g.Ready() {
+		items = append(items, completionItem{id: id})
+	}
+	if m.showCompleted {
+		for _, id := range m.g.Completed() {
+			items = append(items, completionItem{id: id})
+		}
+	}
+	return items
+}
+
+func (m Model) visibleLeaves() []graph.NodeID {
+	leaves := m.g.Leaves()
+	if m.showCompleted {
+		return leaves
+	}
+	filtered := make([]graph.NodeID, 0, len(leaves))
+	for _, id := range leaves {
+		node, _ := m.g.Node(id)
+		if !node.Complete {
+			filtered = append(filtered, id)
+		}
+	}
+	return filtered
+}
+
+func (m Model) toggleComplete(id graph.NodeID) Model {
+	node, ok := m.g.Node(id)
+	if !ok {
+		m.message = "node missing"
+		return m
+	}
+	next := !node.Complete
+	if err := m.g.SetComplete(id, next); err != nil {
+		m.message = err.Error()
+		return m
+	}
+	m.dirty = true
+	if next {
+		m.message = "marked complete"
+	} else {
+		m.message = "marked incomplete"
+	}
+	return m
+}
+
+func (m Model) resetCompletion() Model {
+	count := m.g.ResetCompletion()
+	if count == 0 {
+		m.message = "no completed nodes"
+		return m
+	}
+	m.dirty = true
+	m.message = fmt.Sprintf("reset %d completed nodes", count)
+	return m
+}
+
+func (m Model) reorderSelected(items []relationItem, direction int) Model {
+	if len(items) == 0 || m.cursor < 0 || m.cursor >= len(items) {
+		return m
+	}
+
+	selected := items[m.cursor]
+	targetIndex := -1
+	for i := m.cursor + direction; i >= 0 && i < len(items); i += direction {
+		if items[i].kind == selected.kind {
+			targetIndex = i
+			break
+		}
+	}
+	if targetIndex < 0 {
+		return m
+	}
+	orderIndex := indexOfID(m.g.Order(), items[targetIndex].id)
+	if orderIndex < 0 {
+		return m
+	}
+	if m.g.MoveTo(selected.id, orderIndex) {
+		m.cursor = targetIndex
+		m.dirty = true
+	}
+	return m
+}
+
+func (m Model) reorderListItem(ids []graph.NodeID, cursor, direction int) (Model, int) {
+	if len(ids) == 0 || cursor < 0 || cursor >= len(ids) {
+		return m, cursor
+	}
+	target := cursor + direction
+	if target < 0 || target >= len(ids) {
+		return m, cursor
+	}
+	orderIndex := indexOfID(m.g.Order(), ids[target])
+	if orderIndex < 0 {
+		return m, cursor
+	}
+	if m.g.MoveTo(ids[cursor], orderIndex) {
+		m.dirty = true
+		cursor = target
+	}
+	return m, cursor
+}
+
+func (m Model) reorderReadyItem(direction int) Model {
+	ready := m.g.Ready()
+	if m.readyCursor < len(ready) {
+		next, cursor := m.reorderListItem(ready, m.readyCursor, direction)
+		next.readyCursor = cursor
+		return next
+	}
+	if !m.showCompleted {
+		return m
+	}
+	completedCursor := m.readyCursor - len(ready)
+	completed := m.g.Completed()
+	next, cursor := m.reorderListItem(completed, completedCursor, direction)
+	next.readyCursor = len(ready) + cursor
+	return next
+}
+
 func (m Model) save() Model {
 	if err := m.g.Validate(); err != nil {
 		m.message = err.Error()
@@ -348,18 +481,18 @@ func (m Model) rewrite() Model {
 	return m
 }
 
-func (m Model) exportSequence(path string) Model {
+func (m Model) exportOrder(path string) Model {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		m.message = "export path cannot be empty"
 		return m
 	}
-	if m.seq == nil {
-		m.message = "no sequence to export"
+	if m.order == nil {
+		m.message = "no order to export"
 		return m
 	}
 	var b strings.Builder
-	for _, id := range m.seq.Output() {
+	for _, id := range m.order.Output() {
 		node, ok := m.g.Node(id)
 		if !ok {
 			continue
@@ -412,9 +545,18 @@ func inputWidth(width int) int {
 	return width - 4
 }
 
-func defaultSequencePath(path string) string {
+func defaultOrderPath(path string) string {
 	if path == "" {
-		return "sequence.txt"
+		return "order.txt"
 	}
-	return fmt.Sprintf("%s.sequence.txt", path)
+	return fmt.Sprintf("%s.order.txt", path)
+}
+
+func indexOfID(ids []graph.NodeID, want graph.NodeID) int {
+	for i, id := range ids {
+		if id == want {
+			return i
+		}
+	}
+	return -1
 }

@@ -155,7 +155,7 @@ func TestRootsAndOrdering(t *testing.T) {
 	if got := g.Roots(); !reflect.DeepEqual(got, []NodeID{"a", "b"}) {
 		t.Fatalf("roots = %#v", got)
 	}
-	if !g.MoveLater("a") {
+	if !g.MoveTo("a", 1) {
 		t.Fatal("move later failed")
 	}
 	if got := g.Order(); !reflect.DeepEqual(got, []NodeID{"b", "a", "c"}) {
@@ -173,7 +173,7 @@ func TestLeavesAndOrdering(t *testing.T) {
 	if got := g.Leaves(); !reflect.DeepEqual(got, []NodeID{"c", "d"}) {
 		t.Fatalf("leaves = %#v", got)
 	}
-	if !g.MoveEarlier("d") {
+	if !g.MoveTo("d", 2) {
 		t.Fatal("move earlier failed")
 	}
 	if got := g.Order(); !reflect.DeepEqual(got, []NodeID{"a", "b", "d", "c"}) {
@@ -184,38 +184,66 @@ func TestLeavesAndOrdering(t *testing.T) {
 	}
 }
 
-func TestManualSequence(t *testing.T) {
+func TestReadyUsesCompletionState(t *testing.T) {
 	g := mustGraph(t, "a", "A", "b", "B", "c", "C")
 	mustAddEdge(t, g, "a", "c")
 	mustAddEdge(t, g, "b", "c")
-	seq := NewSequence(g)
-	if got := seq.Available(); !reflect.DeepEqual(got, []NodeID{"a", "b"}) {
+
+	if got := g.Ready(); !reflect.DeepEqual(got, []NodeID{"a", "b"}) {
+		t.Fatalf("ready = %#v", got)
+	}
+	if err := g.SetComplete("a", true); err != nil {
+		t.Fatal(err)
+	}
+	if got := g.Ready(); !reflect.DeepEqual(got, []NodeID{"b"}) {
+		t.Fatalf("ready after a complete = %#v", got)
+	}
+	if err := g.SetComplete("b", true); err != nil {
+		t.Fatal(err)
+	}
+	if got := g.Ready(); !reflect.DeepEqual(got, []NodeID{"c"}) {
+		t.Fatalf("ready after b complete = %#v", got)
+	}
+	if count := g.ResetCompletion(); count != 2 {
+		t.Fatalf("reset count = %d", count)
+	}
+	if got := g.Ready(); !reflect.DeepEqual(got, []NodeID{"a", "b"}) {
+		t.Fatalf("ready after reset = %#v", got)
+	}
+}
+
+func TestOrderStartsFromCompletionState(t *testing.T) {
+	g := mustGraph(t, "a", "A", "b", "B", "c", "C")
+	mustAddEdge(t, g, "a", "c")
+	mustAddEdge(t, g, "b", "c")
+	if err := g.SetComplete("a", true); err != nil {
+		t.Fatal(err)
+	}
+	order := NewOrder(g)
+	if got := order.Available(); !reflect.DeepEqual(got, []NodeID{"b"}) {
 		t.Fatalf("available = %#v", got)
 	}
-	if err := seq.Pick("a"); err != nil {
-		t.Fatal(err)
-	}
-	if got := seq.Available(); !reflect.DeepEqual(got, []NodeID{"b"}) {
-		t.Fatalf("available after a = %#v", got)
-	}
-	if err := seq.Pick("c"); err == nil {
+	if err := order.Pick("c"); err == nil {
 		t.Fatal("expected blocked c")
 	}
-	if err := seq.Pick("b"); err != nil {
+	if err := order.Pick("b"); err != nil {
 		t.Fatal(err)
 	}
-	if got := seq.Available(); !reflect.DeepEqual(got, []NodeID{"c"}) {
+	if got := order.Available(); !reflect.DeepEqual(got, []NodeID{"c"}) {
 		t.Fatalf("available after b = %#v", got)
 	}
-	if !seq.Undo() {
+	if !order.Undo() {
 		t.Fatal("undo failed")
 	}
-	if got := seq.Available(); !reflect.DeepEqual(got, []NodeID{"b"}) {
+	if got := order.Available(); !reflect.DeepEqual(got, []NodeID{"b"}) {
 		t.Fatalf("available after undo = %#v", got)
 	}
-	seq.Reset()
-	if got := seq.Output(); len(got) != 0 {
+	order.Reset()
+	if got := order.Output(); len(got) != 0 {
 		t.Fatalf("output after reset = %#v", got)
+	}
+	if got := order.Available(); !reflect.DeepEqual(got, []NodeID{"b"}) {
+		t.Fatalf("available after reset = %#v", got)
 	}
 }
 

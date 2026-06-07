@@ -10,8 +10,9 @@ import (
 type NodeID string
 
 type Node struct {
-	ID   NodeID
-	Text string
+	ID       NodeID
+	Text     string
+	Complete bool
 }
 
 type Graph struct {
@@ -21,10 +22,12 @@ type Graph struct {
 }
 
 type Stats struct {
-	Nodes  int
-	Edges  int
-	Roots  int
-	Leaves int
+	Nodes    int
+	Edges    int
+	Complete int
+	Ready    int
+	Roots    int
+	Leaves   int
 }
 
 var (
@@ -120,6 +123,17 @@ func (g *Graph) EditNodeText(id NodeID, newText string) error {
 	return nil
 }
 
+func (g *Graph) SetComplete(id NodeID, complete bool) error {
+	id = cleanID(id)
+	node, ok := g.nodes[id]
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrUnknownNode, id)
+	}
+	node.Complete = complete
+	g.nodes[id] = node
+	return nil
+}
+
 func (g *Graph) RekeyByText() (map[NodeID]NodeID, error) {
 	next := New()
 	mapping := make(map[NodeID]NodeID, len(g.nodes))
@@ -128,6 +142,11 @@ func (g *Graph) RekeyByText() (map[NodeID]NodeID, error) {
 		newID := next.UniqueID(node.Text)
 		if err := next.AddNodeWithID(newID, node.Text); err != nil {
 			return nil, err
+		}
+		if node.Complete {
+			if err := next.SetComplete(newID, true); err != nil {
+				return nil, err
+			}
 		}
 		mapping[oldID] = newID
 	}
@@ -238,6 +257,60 @@ func (g *Graph) Roots() []NodeID {
 	return roots
 }
 
+func (g *Graph) Ready() []NodeID {
+	ready := make([]NodeID, 0)
+	for _, id := range g.order {
+		if g.nodes[id].Complete {
+			continue
+		}
+		blocked := false
+		for parent := range g.parents[id] {
+			if !g.nodes[parent].Complete {
+				blocked = true
+				break
+			}
+		}
+		if !blocked {
+			ready = append(ready, id)
+		}
+	}
+	return ready
+}
+
+func (g *Graph) Completed() []NodeID {
+	completed := make([]NodeID, 0)
+	for _, id := range g.order {
+		if g.nodes[id].Complete {
+			completed = append(completed, id)
+		}
+	}
+	return completed
+}
+
+func (g *Graph) CompleteCount() int {
+	count := 0
+	for _, node := range g.nodes {
+		if node.Complete {
+			count++
+		}
+	}
+	return count
+}
+
+func (g *Graph) ResetCompletion() int {
+	count := 0
+	for _, id := range g.order {
+		node := g.nodes[id]
+		if !node.Complete {
+			continue
+		}
+		node.Complete = false
+		g.nodes[id] = node
+		count++
+	}
+	return count
+}
+
 func (g *Graph) Leaves() []NodeID {
 	childCounts := make(map[NodeID]int, len(g.nodes))
 	for _, parents := range g.parents {
@@ -252,14 +325,6 @@ func (g *Graph) Leaves() []NodeID {
 		}
 	}
 	return leaves
-}
-
-func (g *Graph) MoveEarlier(id NodeID) bool {
-	return g.move(id, -1)
-}
-
-func (g *Graph) MoveLater(id NodeID) bool {
-	return g.move(id, 1)
 }
 
 func (g *Graph) MoveTo(id NodeID, index int) bool {
@@ -287,7 +352,14 @@ func (g *Graph) Stats() Stats {
 	for _, parents := range g.parents {
 		edges += len(parents)
 	}
-	return Stats{Nodes: len(g.nodes), Edges: edges, Roots: len(g.Roots()), Leaves: len(g.Leaves())}
+	return Stats{
+		Nodes:    len(g.nodes),
+		Edges:    edges,
+		Complete: g.CompleteCount(),
+		Ready:    len(g.Ready()),
+		Roots:    len(g.Roots()),
+		Leaves:   len(g.Leaves()),
+	}
 }
 
 func (g *Graph) Validate() error {
@@ -405,20 +477,6 @@ func (g *Graph) sortedIDs(set map[NodeID]struct{}) []NodeID {
 		return pos[ids[i]] < pos[ids[j]]
 	})
 	return ids
-}
-
-func (g *Graph) move(id NodeID, delta int) bool {
-	id = cleanID(id)
-	i := g.indexOf(id)
-	if i < 0 {
-		return false
-	}
-	j := i + delta
-	if j < 0 || j >= len(g.order) {
-		return false
-	}
-	g.order[i], g.order[j] = g.order[j], g.order[i]
-	return true
 }
 
 func (g *Graph) indexOf(id NodeID) int {

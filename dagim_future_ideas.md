@@ -4,7 +4,7 @@ These ideas are intentionally outside the next focused changeset. They should be
 
 ## Views
 
-1. Add "why is this blocked?" inspection for manual sequence mode.
+1. Add "why is this blocked?" inspection for order remaining mode.
 2. Add "what would this unblock?" preview for selected nodes.
 3. Add subgraph filtering for larger graphs.
 
@@ -17,10 +17,9 @@ These ideas are intentionally outside the next focused changeset. They should be
 
 ## Workflow
 
-1. Add persistent completion or processed state if `dagim` proves useful for execution, not just brainstorming.
-2. Add optional graph statistics beyond `--check`.
-3. Add clipboard integration.
-4. Add configurable keybindings.
+1. Add optional graph statistics beyond `--check`.
+2. Add clipboard integration.
+3. Add configurable keybindings.
 
 ## Export
 

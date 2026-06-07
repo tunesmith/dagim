@@ -30,18 +30,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updatePrompt(msg)
 		case modeSearch:
 			return m.updateSearch(msg)
-		case modeRoots:
-			return m.updateRoots(msg)
+		case modeReady:
+			return m.updateReady(msg)
 		case modeLeaves:
 			return m.updateLeaves(msg)
-		case modeSequence:
-			return m.updateSequence(msg)
+		case modeOrder:
+			return m.updateOrder(msg)
 		case modeInspect:
 			return m.updateInspect(msg)
 		case modeConfirmDelete:
 			return m.updateConfirmDelete(msg)
 		case modeConfirmRewrite:
 			return m.updateConfirmRewrite(msg)
+		case modeConfirmReset:
+			return m.updateConfirmReset(msg)
 		case modeConfirmQuit:
 			return m.updateConfirmQuit(msg)
 		case modeHelp:
@@ -133,31 +135,42 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "/":
 		return m.setSearch()
 	case "r":
-		m.mode = modeRoots
-		m.rootsCursor = 0
+		m.mode = modeReady
+		m.readyCursor = 0
 	case "l":
 		m.previous = modeNode
 		m.leavesReturn = modeNode
 		m.mode = modeLeaves
 		m.leavesCursor = 0
+	case " ":
+		m = m.toggleComplete(m.current)
 	case "J":
-		if m.g.MoveLater(m.current) {
-			m.dirty = true
-		}
+		m = m.reorderSelected(items, 1)
 	case "K":
-		if m.g.MoveEarlier(m.current) {
-			m.dirty = true
-		}
-	case "m":
-		m.seq = graph.NewSequence(m.g)
+		m = m.reorderSelected(items, -1)
+	case "o":
+		m.order = graph.NewOrder(m.g)
 		m.previous = modeNode
-		m.seqReturn = modeNode
-		m.mode = modeSequence
+		m.orderReturn = modeNode
+		m.mode = modeOrder
 		m.cursor = 0
 	case "s":
 		m = m.save()
 	case "R":
+		m.previous = modeNode
+		m.mode = modeConfirmReset
+	case "W":
+		m.previous = modeNode
 		m.mode = modeConfirmRewrite
+	case "v":
+		m.showCompleted = !m.showCompleted
+		items = m.relationItems()
+		if m.cursor >= len(items) {
+			m.cursor = len(items) - 1
+		}
+		if m.cursor < 0 {
+			m.cursor = 0
+		}
 	case "?":
 		m.previous = modeNode
 		m.mode = modeHelp
@@ -247,9 +260,9 @@ func (m Model) submitPrompt(useSuggestion bool) (tea.Model, tea.Cmd) {
 		} else {
 			m = m.addLinkedNode(value, asParent)
 		}
-	case promptExportSequence:
-		m = m.exportSequence(value)
-		m.mode = modeSequence
+	case promptExportOrder:
+		m = m.exportOrder(value)
+		m.mode = modeOrder
 		m.promptAction = promptNone
 		return m, nil
 	}
@@ -285,16 +298,6 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeNode
 		}
 		return m, nil
-	case "i":
-		if len(results) > 0 {
-			if m.searchCursor >= len(results) {
-				m.searchCursor = len(results) - 1
-			}
-			m.inspectID = results[m.searchCursor]
-			m.previous = modeSearch
-			m.mode = modeInspect
-		}
-		return m, nil
 	}
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
@@ -302,58 +305,81 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) updateRoots(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	roots := m.g.Roots()
+func (m Model) updateReady(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	items := m.readyItems()
 	switch msg.String() {
 	case "a":
 		return m.setPrompt(promptAddNode, "Add node", "")
 	case "j", "down":
-		if m.rootsCursor < len(roots)-1 {
-			m.rootsCursor++
+		if m.readyCursor < len(items)-1 {
+			m.readyCursor++
 		}
 	case "k", "up":
-		if m.rootsCursor > 0 {
-			m.rootsCursor--
+		if m.readyCursor > 0 {
+			m.readyCursor--
 		}
 	case "enter":
-		if len(roots) > 0 {
-			if m.rootsCursor >= len(roots) {
-				m.rootsCursor = len(roots) - 1
+		if len(items) > 0 {
+			if m.readyCursor >= len(items) {
+				m.readyCursor = len(items) - 1
 			}
-			m.current = roots[m.rootsCursor]
+			m.current = items[m.readyCursor].id
 			m.cursor = 0
 			m.mode = modeNode
 		}
-	case "i":
-		if len(roots) > 0 {
-			if m.rootsCursor >= len(roots) {
-				m.rootsCursor = len(roots) - 1
+	case " ":
+		if len(items) > 0 {
+			if m.readyCursor >= len(items) {
+				m.readyCursor = len(items) - 1
 			}
-			m.inspectID = roots[m.rootsCursor]
-			m.previous = modeRoots
+			m = m.toggleComplete(items[m.readyCursor].id)
+			if m.readyCursor >= len(m.readyItems()) && m.readyCursor > 0 {
+				m.readyCursor--
+			}
+		}
+	case "i":
+		if len(items) > 0 {
+			if m.readyCursor >= len(items) {
+				m.readyCursor = len(items) - 1
+			}
+			m.inspectID = items[m.readyCursor].id
+			m.previous = modeReady
 			m.mode = modeInspect
 		}
 	case "/":
 		return m.setSearch()
 	case "l":
-		m.previous = modeRoots
-		m.leavesReturn = modeRoots
+		m.previous = modeReady
+		m.leavesReturn = modeReady
 		m.mode = modeLeaves
 		m.leavesCursor = 0
-	case "m":
-		m.seq = graph.NewSequence(m.g)
-		m.previous = modeRoots
-		m.seqReturn = modeRoots
-		m.mode = modeSequence
+	case "o":
+		m.order = graph.NewOrder(m.g)
+		m.previous = modeReady
+		m.orderReturn = modeReady
+		m.mode = modeOrder
 		m.cursor = 0
 	case "s":
 		m = m.save()
+	case "v":
+		m.showCompleted = !m.showCompleted
+		m.readyCursor = 0
+	case "J":
+		m = m.reorderReadyItem(1)
+	case "K":
+		m = m.reorderReadyItem(-1)
+	case "R":
+		m.previous = modeReady
+		m.mode = modeConfirmReset
+	case "W":
+		m.previous = modeReady
+		m.mode = modeConfirmRewrite
 	case "?":
-		m.previous = modeRoots
+		m.previous = modeReady
 		m.mode = modeHelp
 	case "q", "ctrl+c":
 		if m.dirty {
-			m.previous = modeRoots
+			m.previous = modeReady
 			m.mode = modeConfirmQuit
 			return m, nil
 		}
@@ -363,7 +389,7 @@ func (m Model) updateRoots(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	leaves := m.g.Leaves()
+	leaves := m.visibleLeaves()
 	switch msg.String() {
 	case "esc":
 		m.mode = m.leavesReturn
@@ -384,6 +410,16 @@ func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor = 0
 			m.mode = modeNode
 		}
+	case " ":
+		if len(leaves) > 0 {
+			if m.leavesCursor >= len(leaves) {
+				m.leavesCursor = len(leaves) - 1
+			}
+			m = m.toggleComplete(leaves[m.leavesCursor])
+			if m.leavesCursor >= len(m.visibleLeaves()) && m.leavesCursor > 0 {
+				m.leavesCursor--
+			}
+		}
 	case "i":
 		if len(leaves) > 0 {
 			if m.leavesCursor >= len(leaves) {
@@ -396,10 +432,29 @@ func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "/":
 		return m.setSearch()
 	case "r":
-		m.mode = modeRoots
-		m.rootsCursor = 0
+		m.mode = modeReady
+		m.readyCursor = 0
+	case "o":
+		m.order = graph.NewOrder(m.g)
+		m.previous = modeLeaves
+		m.orderReturn = modeLeaves
+		m.mode = modeOrder
+		m.cursor = 0
 	case "s":
 		m = m.save()
+	case "v":
+		m.showCompleted = !m.showCompleted
+		m.leavesCursor = 0
+	case "J":
+		m, m.leavesCursor = m.reorderListItem(leaves, m.leavesCursor, 1)
+	case "K":
+		m, m.leavesCursor = m.reorderListItem(leaves, m.leavesCursor, -1)
+	case "R":
+		m.previous = modeLeaves
+		m.mode = modeConfirmReset
+	case "W":
+		m.previous = modeLeaves
+		m.mode = modeConfirmRewrite
 	case "?":
 		m.previous = modeLeaves
 		m.mode = modeHelp
@@ -414,14 +469,14 @@ func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) updateSequence(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.seq == nil {
-		m.seq = graph.NewSequence(m.g)
+func (m Model) updateOrder(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.order == nil {
+		m.order = graph.NewOrder(m.g)
 	}
-	available := m.seq.Available()
+	available := m.order.Available()
 	switch msg.String() {
 	case "esc", "q":
-		m.mode = m.seqReturn
+		m.mode = m.orderReturn
 	case "j", "down":
 		if m.cursor < len(available)-1 {
 			m.cursor++
@@ -435,10 +490,10 @@ func (m Model) updateSequence(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.cursor >= len(available) {
 				m.cursor = len(available) - 1
 			}
-			if err := m.seq.Pick(available[m.cursor]); err != nil {
+			if err := m.order.Pick(available[m.cursor]); err != nil {
 				m.message = err.Error()
 			}
-			if m.cursor >= len(m.seq.Available()) && m.cursor > 0 {
+			if m.cursor >= len(m.order.Available()) && m.cursor > 0 {
 				m.cursor--
 			}
 		}
@@ -448,18 +503,18 @@ func (m Model) updateSequence(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.cursor = len(available) - 1
 			}
 			m.inspectID = available[m.cursor]
-			m.previous = modeSequence
+			m.previous = modeOrder
 			m.mode = modeInspect
 		}
 	case "u":
-		if !m.seq.Undo() {
+		if !m.order.Undo() {
 			m.message = "nothing to undo"
 		}
 	case "r":
-		m.seq.Reset()
+		m.order.Reset()
 		m.cursor = 0
 	case "e":
-		return m.setPrompt(promptExportSequence, "Export sequence", defaultSequencePath(m.path))
+		return m.setPrompt(promptExportOrder, "Export order", defaultOrderPath(m.path))
 	}
 	return m, nil
 }
@@ -494,9 +549,20 @@ func (m Model) updateConfirmRewrite(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y", "Y":
 		m = m.rewrite()
-		m.mode = modeNode
+		m.mode = m.previous
 	case "n", "N", "esc":
-		m.mode = modeNode
+		m.mode = m.previous
+	}
+	return m, nil
+}
+
+func (m Model) updateConfirmReset(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "Y":
+		m = m.resetCompletion()
+		m.mode = m.previous
+	case "n", "N", "esc":
+		m.mode = m.previous
 	}
 	return m, nil
 }

@@ -12,12 +12,13 @@ import (
 const maxContentWidth = 112
 
 var (
-	titleStyle   = lipgloss.NewStyle().Bold(true)
-	mutedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
-	selectStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
-	nodeStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Bold(true)
-	commandStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	titleStyle    = lipgloss.NewStyle().Bold(true)
+	mutedStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
+	selectStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
+	nodeStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Bold(true)
+	completeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Strikethrough(true)
+	commandStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 )
 
 func (m Model) View() string {
@@ -29,18 +30,20 @@ func (m Model) View() string {
 		body = m.viewPrompt()
 	case modeSearch:
 		body = m.viewSearch()
-	case modeRoots:
-		body = m.viewRoots()
+	case modeReady:
+		body = m.viewReady()
 	case modeLeaves:
 		body = m.viewLeaves()
-	case modeSequence:
-		body = m.viewSequence()
+	case modeOrder:
+		body = m.viewOrder()
 	case modeInspect:
 		body = m.viewInspect()
 	case modeConfirmDelete:
 		body = m.viewConfirmDelete()
 	case modeConfirmRewrite:
 		body = m.viewConfirmRewrite()
+	case modeConfirmReset:
+		body = m.viewConfirmReset()
 	case modeConfirmQuit:
 		body = m.viewConfirmQuit()
 	case modeHelp:
@@ -73,23 +76,35 @@ func (m Model) viewNode() string {
 	b.WriteByte('\n')
 	b.WriteString(m.rule())
 	b.WriteByte('\n')
-	if len(parents) == 0 {
+	renderedParents := 0
+	for _, id := range parents {
+		parent, _ := m.g.Node(id)
+		if parent.Complete && !m.showCompleted {
+			continue
+		}
+		b.WriteString(m.renderSelectableNode(cursor == m.cursor, parent))
+		b.WriteByte('\n')
+		cursor++
+		renderedParents++
+	}
+	if renderedParents == 0 {
 		b.WriteString(mutedStyle.Render("  none"))
 		b.WriteByte('\n')
-	} else {
-		for _, id := range parents {
-			parent, _ := m.g.Node(id)
-			b.WriteString(m.renderSelectable(cursor == m.cursor, parent.Text))
-			b.WriteByte('\n')
-			cursor++
-		}
 	}
 	b.WriteByte('\n')
-	b.WriteString(titleStyle.Render("Current node"))
+	title := "Current node"
+	if node.Complete {
+		title += " [complete]"
+	}
+	b.WriteString(titleStyle.Render(title))
 	b.WriteByte('\n')
 	b.WriteString(m.strongRule())
 	b.WriteByte('\n')
-	b.WriteString(m.renderWrapped("", node.Text, nodeStyle))
+	style := nodeStyle
+	if node.Complete {
+		style = completeStyle
+	}
+	b.WriteString(m.renderWrapped("", node.Text, style))
 	b.WriteString("\n\n")
 
 	children, _ := m.g.ChildrenOf(node.ID)
@@ -97,16 +112,20 @@ func (m Model) viewNode() string {
 	b.WriteByte('\n')
 	b.WriteString(m.rule())
 	b.WriteByte('\n')
-	if len(children) == 0 {
+	renderedChildren := 0
+	for _, id := range children {
+		child, _ := m.g.Node(id)
+		if child.Complete && !m.showCompleted {
+			continue
+		}
+		b.WriteString(m.renderSelectableNode(cursor == m.cursor, child))
+		b.WriteByte('\n')
+		cursor++
+		renderedChildren++
+	}
+	if renderedChildren == 0 {
 		b.WriteString(mutedStyle.Render("  none"))
 		b.WriteByte('\n')
-	} else {
-		for _, id := range children {
-			child, _ := m.g.Node(id)
-			b.WriteString(m.renderSelectable(cursor == m.cursor, child.Text))
-			b.WriteByte('\n')
-			cursor++
-		}
 	}
 	b.WriteByte('\n')
 	b.WriteString(titleStyle.Render("Commands"))
@@ -117,9 +136,11 @@ func (m Model) viewNode() string {
 	b.WriteByte('\n')
 	b.WriteString(commandStyle.Render("i inspect     e edit          d delete       / search"))
 	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("r roots       l leaves        m sequence    s save"))
+	b.WriteString(commandStyle.Render("r ready       l leaves        o order       s save"))
 	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("J/K reorder   R rewrite       q quit        ? help"))
+	b.WriteString(commandStyle.Render("Space done/undone  v completed  R reset  W rewrite"))
+	b.WriteByte('\n')
+	b.WriteString(commandStyle.Render("J/K reorder   q quit          ? help"))
 	return b.String()
 }
 
@@ -181,42 +202,68 @@ func (m Model) viewSearch() string {
 	} else {
 		for i, id := range results {
 			node, _ := m.g.Node(id)
-			b.WriteString(m.renderSelectable(i == m.searchCursor, node.Text))
+			b.WriteString(m.renderSelectableNode(i == m.searchCursor, node))
 			b.WriteByte('\n')
 		}
 	}
 	b.WriteString("\n")
-	b.WriteString(commandStyle.Render("Enter focus    i inspect    Up/Down select    Esc cancel"))
+	b.WriteString(commandStyle.Render("Enter focus    Up/Down select    Esc cancel"))
 	return b.String()
 }
 
-func (m Model) viewRoots() string {
-	roots := m.g.Roots()
+func (m Model) viewReady() string {
+	ready := m.g.Ready()
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Roots"))
+	b.WriteString(titleStyle.Render("Ready"))
 	b.WriteByte('\n')
 	b.WriteString(m.rule())
 	b.WriteByte('\n')
-	if len(roots) == 0 {
-		b.WriteString(mutedStyle.Render("  no roots"))
+	index := 0
+	if len(ready) == 0 {
+		if len(m.g.Nodes()) > 0 && m.g.CompleteCount() == len(m.g.Nodes()) {
+			b.WriteString(mutedStyle.Render("  all complete"))
+		} else {
+			b.WriteString(mutedStyle.Render("  none ready"))
+		}
 	} else {
-		for i, id := range roots {
+		for _, id := range ready {
 			node, _ := m.g.Node(id)
-			b.WriteString(m.renderSelectable(i == m.rootsCursor, node.Text))
+			b.WriteString(m.renderSelectableNode(index == m.readyCursor, node))
 			b.WriteByte('\n')
+			index++
+		}
+	}
+	if m.showCompleted {
+		completed := m.g.Completed()
+		b.WriteString("\n\n")
+		b.WriteString(titleStyle.Render("Completed"))
+		b.WriteByte('\n')
+		b.WriteString(m.rule())
+		b.WriteByte('\n')
+		if len(completed) == 0 {
+			b.WriteString(mutedStyle.Render("  none complete"))
+		} else {
+			for _, id := range completed {
+				node, _ := m.g.Node(id)
+				b.WriteString(m.renderSelectableNode(index == m.readyCursor, node))
+				b.WriteByte('\n')
+				index++
+			}
 		}
 	}
 	b.WriteString("\n")
-	b.WriteString(commandStyle.Render("a add node    Enter focus    i inspect    / search"))
+	b.WriteString(commandStyle.Render("a add node    Enter focus    Space done/undone  / search"))
 	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("l leaves      m sequence     s save"))
+	b.WriteString(commandStyle.Render("i inspect     v completed    o order       l leaves"))
+	b.WriteByte('\n')
+	b.WriteString(commandStyle.Render("R reset       W rewrite      J/K reorder  s save"))
 	b.WriteByte('\n')
 	b.WriteString(commandStyle.Render("q quit        ? help"))
 	return b.String()
 }
 
 func (m Model) viewLeaves() string {
-	leaves := m.g.Leaves()
+	leaves := m.visibleLeaves()
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Leaves"))
 	b.WriteByte('\n')
@@ -227,31 +274,35 @@ func (m Model) viewLeaves() string {
 	} else {
 		for i, id := range leaves {
 			node, _ := m.g.Node(id)
-			b.WriteString(m.renderSelectable(i == m.leavesCursor, node.Text))
+			b.WriteString(m.renderSelectableNode(i == m.leavesCursor, node))
 			b.WriteByte('\n')
 		}
 	}
 	b.WriteString("\n")
-	b.WriteString(commandStyle.Render("Enter focus    i inspect    / search    r roots"))
+	b.WriteString(commandStyle.Render("Enter focus    Space done/undone  i inspect  / search"))
 	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("s save         q quit       ? help      Esc back"))
+	b.WriteString(commandStyle.Render("r ready        v completed   o order      J/K reorder"))
+	b.WriteByte('\n')
+	b.WriteString(commandStyle.Render("R reset        W rewrite     s save       q quit"))
+	b.WriteByte('\n')
+	b.WriteString(commandStyle.Render("Esc back       ? help"))
 	return b.String()
 }
 
-func (m Model) viewSequence() string {
-	if m.seq == nil {
-		return "No sequence state."
+func (m Model) viewOrder() string {
+	if m.order == nil {
+		return "No order state."
 	}
 	var b strings.Builder
-	if m.seq.Complete() {
-		b.WriteString(titleStyle.Render("Sequence complete"))
+	if m.order.Complete() {
+		b.WriteString(titleStyle.Render("Order complete"))
 	} else {
-		b.WriteString(titleStyle.Render("Manual sequence"))
+		b.WriteString(titleStyle.Render("Order remaining"))
 	}
 	b.WriteByte('\n')
 	b.WriteString(m.rule())
 	b.WriteByte('\n')
-	output := m.seq.Output()
+	output := m.order.Output()
 	if len(output) == 0 {
 		b.WriteString(mutedStyle.Render("  none yet"))
 		b.WriteByte('\n')
@@ -267,9 +318,9 @@ func (m Model) viewSequence() string {
 	b.WriteByte('\n')
 	b.WriteString(m.rule())
 	b.WriteByte('\n')
-	available := m.seq.Available()
+	available := m.order.Available()
 	if len(available) == 0 {
-		if m.seq.Complete() {
+		if m.order.Complete() {
 			b.WriteString(mutedStyle.Render("  complete"))
 		} else {
 			b.WriteString(mutedStyle.Render("  none available"))
@@ -302,6 +353,10 @@ func (m Model) viewInspect() string {
 	b.WriteString(m.renderWrapped("", node.Text, lipgloss.NewStyle()))
 	b.WriteByte('\n')
 	b.WriteString(mutedStyle.Render(string(node.ID)))
+	if node.Complete {
+		b.WriteByte('\n')
+		b.WriteString(mutedStyle.Render("complete"))
+	}
 	b.WriteString("\n\n")
 	b.WriteString(m.renderIDList("Parents", node.ID, m.g.ParentsOf))
 	b.WriteByte('\n')
@@ -331,6 +386,16 @@ func (m Model) viewConfirmRewrite() string {
 	}, "\n")
 }
 
+func (m Model) viewConfirmReset() string {
+	return strings.Join([]string{
+		titleStyle.Render("Reset completion?"),
+		m.rule(),
+		"This removes every complete marker from the graph and saves nothing yet.",
+		"",
+		commandStyle.Render("y reset    n cancel"),
+	}, "\n")
+}
+
 func (m Model) viewConfirmQuit() string {
 	return strings.Join([]string{
 		titleStyle.Render("Unsaved changes."),
@@ -345,25 +410,38 @@ func (m Model) viewHelp() string {
 		m.rule(),
 		"dagim edits one plain-text DAG file.",
 		"",
-		"Non-empty files open to roots. Enter focuses a selected root.",
+		"Non-empty files open to ready. Enter focuses a selected node.",
 		"",
 		"a add node        p add/link parent    c add/link child",
 		"x unlink          i inspect            e edit",
-		"d delete          / search             r roots",
-		"l leaves          m sequence           J/K reorder",
-		"s save            R rewrite file       q quit",
+		"d delete          / search             r ready",
+		"l leaves          o order remaining    J/K reorder",
+		"Space done/undone v completed          s save",
+		"R reset done      W rewrite file       q quit",
 		"ctrl+c force quit ctrl+z suspend",
 		"",
 		"In parent/child prompts, Enter links the selected match and Ctrl+N creates the typed text.",
-		"Manual sequence is temporary; export writes one node text per line.",
+		"Order remaining is temporary; export writes one node text per line.",
 		"",
 		commandStyle.Render("Esc back"),
 	}, "\n")
 }
 
 func (m Model) renderSelectable(selected bool, text string) string {
+	return m.renderSelectableText(selected, text, false)
+}
+
+func (m Model) renderSelectableNode(selected bool, node graph.Node) string {
+	return m.renderSelectableText(selected, node.Text, node.Complete)
+}
+
+func (m Model) renderSelectableText(selected bool, text string, complete bool) string {
 	prefix := "  "
 	style := lipgloss.NewStyle()
+	if complete {
+		text = "[x] " + text
+		style = completeStyle
+	}
 	if selected {
 		prefix = "> "
 		style = selectStyle
