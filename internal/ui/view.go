@@ -131,7 +131,12 @@ func (m Model) viewPrompt() string {
 	if m.promptAction == promptAddParent || m.promptAction == promptAddChild {
 		results := m.promptMatches()
 		b.WriteString("\n\n")
-		b.WriteString(titleStyle.Render("Matches"))
+		matchTitle := "Matches"
+		if len(results) > 0 {
+			start, end := m.promptMatchWindow(len(results))
+			matchTitle = fmt.Sprintf("Matches %d-%d of %d", start+1, end, len(results))
+		}
+		b.WriteString(titleStyle.Render(matchTitle))
 		b.WriteByte('\n')
 		b.WriteString(m.rule())
 		b.WriteByte('\n')
@@ -139,12 +144,14 @@ func (m Model) viewPrompt() string {
 			if len(m.searchResults(m.input.Value())) == 0 {
 				b.WriteString(mutedStyle.Render("  no matches; Enter creates a new node"))
 			} else {
-				b.WriteString(mutedStyle.Render("  no eligible matches; existing links are hidden"))
+				b.WriteString(mutedStyle.Render("  no eligible matches; existing links or cycles are hidden"))
 			}
 		} else {
-			for i, id := range results {
+			start, end := m.promptMatchWindow(len(results))
+			for i := start; i < end; i++ {
+				id := results[i]
 				node, _ := m.g.Node(id)
-				b.WriteString(m.renderSelectable(i == m.suggestionCursor, node.Text))
+				b.WriteString(m.renderSelectableLine(i == m.suggestionCursor, node.Text))
 				b.WriteByte('\n')
 			}
 			b.WriteString(mutedStyle.Render("Enter links selected match; Ctrl+N creates typed text"))
@@ -359,7 +366,21 @@ func (m Model) renderSelectable(selected bool, text string) string {
 		prefix = "> "
 		style = selectStyle
 	}
-	return m.renderWrapped(prefix, text, style)
+	return m.renderWrappedWithContinuation(prefix, text, style, len(prefix)+2)
+}
+
+func (m Model) renderSelectableLine(selected bool, text string) string {
+	prefix := "  "
+	style := lipgloss.NewStyle()
+	if selected {
+		prefix = "> "
+		style = selectStyle
+	}
+	width := m.contentWidth() - len(prefix)
+	if width < 12 {
+		width = 12
+	}
+	return prefix + style.Render(truncateText(text, width))
 }
 
 func renderIDListFor(g *graph.Graph, title string, id graph.NodeID, fn func(graph.NodeID) ([]graph.NodeID, error)) string {
@@ -414,6 +435,10 @@ func (m Model) contentWidth() int {
 }
 
 func (m Model) renderWrapped(prefix, text string, style lipgloss.Style) string {
+	return m.renderWrappedWithContinuation(prefix, text, style, len(prefix))
+}
+
+func (m Model) renderWrappedWithContinuation(prefix, text string, style lipgloss.Style, continuationIndent int) string {
 	width := m.contentWidth() - len(prefix)
 	if width < 12 {
 		width = 12
@@ -426,7 +451,7 @@ func (m Model) renderWrapped(prefix, text string, style lipgloss.Style) string {
 	for i, line := range lines {
 		if i > 0 {
 			b.WriteByte('\n')
-			b.WriteString(strings.Repeat(" ", len(prefix)))
+			b.WriteString(strings.Repeat(" ", continuationIndent))
 		} else {
 			b.WriteString(prefix)
 		}
@@ -468,4 +493,18 @@ func wrapWords(text string, width int) []string {
 		lines = append(lines, line.String())
 	}
 	return lines
+}
+
+func truncateText(text string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	runes := []rune(text)
+	if len(runes) <= width {
+		return text
+	}
+	if width <= 3 {
+		return string(runes[:width])
+	}
+	return string(runes[:width-3]) + "..."
 }

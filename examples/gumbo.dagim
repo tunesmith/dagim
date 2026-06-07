@@ -55,7 +55,6 @@ node drain-2-cans-total-diced-canned-tomatoes-give: Drain 2 cans (28 oz total) d
 node add-tomatoes-sausage-gumbo-pot: Add tomatoes and sausage to gumbo pot
   parent add-veggies-gumbo-pot-saute-until-tender  # Add veggies to gumbo pot and saute until tender, about 8-10...
   parent saute-sliced-sausage-until-lightly-browned  # Saute sliced sausage until lightly browned
-  parent simmer-chicken-until-fully-cooked  # Simmer chicken until fully cooked, 20-25 minutes
   parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes, give to Curt
 
 node cook-for-stirring-occasionally: Cook for 10 minutes, stirring occasionally.

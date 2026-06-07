@@ -187,11 +187,67 @@ func (m Model) linkCandidates(query string, action promptAction) []graph.NodeID 
 	}
 	var ids []graph.NodeID
 	for _, id := range m.searchResults(query) {
-		if !hidden[id] {
+		if !hidden[id] && !m.linkWouldCycle(id, action) {
 			ids = append(ids, id)
 		}
 	}
 	return ids
+}
+
+func (m Model) linkWouldCycle(candidate graph.NodeID, action promptAction) bool {
+	if m.current == "" || candidate == "" {
+		return false
+	}
+	switch action {
+	case promptAddParent:
+		_, found := m.g.Path(m.current, candidate)
+		return found
+	case promptAddChild:
+		_, found := m.g.Path(candidate, m.current)
+		return found
+	default:
+		return false
+	}
+}
+
+func (m Model) promptMatchWindow(total int) (int, int) {
+	if total <= 0 {
+		return 0, 0
+	}
+	limit := m.promptMatchLimit()
+	if limit >= total {
+		return 0, total
+	}
+	cursor := m.suggestionCursor
+	if cursor < 0 {
+		cursor = 0
+	}
+	if cursor >= total {
+		cursor = total - 1
+	}
+	start := cursor - limit/2
+	if start < 0 {
+		start = 0
+	}
+	if start+limit > total {
+		start = total - limit
+	}
+	return start, start + limit
+}
+
+func (m Model) promptMatchLimit() int {
+	const maxMatches = 18
+	if m.height <= 0 {
+		return 12
+	}
+	limit := m.height - 10
+	if limit < 3 {
+		return 3
+	}
+	if limit > maxMatches {
+		return maxMatches
+	}
+	return limit
 }
 
 func (m Model) selectedSuggestion() (graph.NodeID, bool) {

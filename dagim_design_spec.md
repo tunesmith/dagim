@@ -496,6 +496,8 @@ The user should be able to:
 
 Normal node, roots, leaves, search, and sequence lists should show node text without inline IDs. Long node text should wrap to the terminal width. Node IDs should be available through inspect views, not through the main scanning surfaces.
 
+Wrapped rows in selectable node lists should use a hanging indent on continuation lines so one long node does not visually read as multiple nodes.
+
 ### 11.2 Suggested Keybindings
 
 These are proposed defaults, not sacred API.
@@ -556,7 +558,9 @@ Behavior:
 5. Reject if it would create a cycle.
 6. On success, keep focus on the current node unless user preference later says otherwise.
 
-The autocomplete list should hide the current node and nodes that are already linked in the requested direction. This is a usability filter; graph operations must still reject duplicate edges and cycles.
+The autocomplete list should hide the current node, nodes already linked in the requested direction, and nodes that would create a cycle if linked. This is a usability filter; graph operations must still reject duplicate edges and cycles because typed exact matches can bypass the suggestion list.
+
+Autocomplete lists should be height-aware. The prompt input and command hints must remain visible in normal terminal sizes; long match lists should render as a bounded window around the selected match and show the displayed range, for example `Matches 8-13 of 25`.
 
 ### 12.3 Add Child
 

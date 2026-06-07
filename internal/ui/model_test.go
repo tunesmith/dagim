@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,7 +64,7 @@ func TestNodeViewWrapsTextAndHidesIDs(t *testing.T) {
 			t.Fatalf("main node view exposed ID %q:\n%s", hidden, view)
 		}
 	}
-	if !strings.Contains(view, "This child node has enough") || !strings.Contains(view, "  words to wrap") {
+	if !strings.Contains(view, "This child node has enough") || !strings.Contains(view, "\n    words to wrap") {
 		t.Fatalf("expected wrapped child text:\n%s", view)
 	}
 }
@@ -626,6 +627,98 @@ func TestLinkPromptHidesDuplicateEdgeCandidates(t *testing.T) {
 	}
 	if !containsID(childCandidates, "available") {
 		t.Fatalf("available node missing from child candidates: %#v", childCandidates)
+	}
+}
+
+func TestLinkPromptHidesCycleCandidates(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("grandparent", "Grandparent"))
+	must(t, g.AddNodeWithID("parent", "Parent"))
+	must(t, g.AddNodeWithID("current", "Current"))
+	must(t, g.AddNodeWithID("child", "Child"))
+	must(t, g.AddNodeWithID("available", "Available"))
+	must(t, g.AddEdge("grandparent", "parent"))
+	must(t, g.AddEdge("parent", "current"))
+	must(t, g.AddEdge("current", "child"))
+
+	m := New("test.dagim", g)
+	m.current = "current"
+
+	parentCandidates := m.linkCandidates("", promptAddParent)
+	if containsID(parentCandidates, "child") {
+		t.Fatalf("cycle-creating parent candidate was shown: %#v", parentCandidates)
+	}
+	if !containsID(parentCandidates, "available") {
+		t.Fatalf("available parent candidate missing: %#v", parentCandidates)
+	}
+
+	childCandidates := m.linkCandidates("", promptAddChild)
+	if containsID(childCandidates, "grandparent") {
+		t.Fatalf("cycle-creating child candidate was shown: %#v", childCandidates)
+	}
+	if !containsID(childCandidates, "available") {
+		t.Fatalf("available child candidate missing: %#v", childCandidates)
+	}
+}
+
+func TestTypedCycleCandidateStillShowsGraphError(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("current", "Current"))
+	must(t, g.AddNodeWithID("child", "Child"))
+	must(t, g.AddEdge("current", "child"))
+
+	m := New("test.dagim", g)
+	m.current = "current"
+	m.mode = modePrompt
+	m.promptAction = promptAddParent
+	m.input.SetValue("Child")
+
+	next, _ := m.submitPrompt(false)
+	updated := next.(Model)
+
+	if updated.mode != modePrompt {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+	if !strings.Contains(updated.message, "cycle") {
+		t.Fatalf("expected cycle error, got %q", updated.message)
+	}
+}
+
+func TestLinkPromptWindowsMatchesToTerminalHeight(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("current", "Current"))
+	for i := 1; i <= 25; i++ {
+		id := graph.NodeID(fmt.Sprintf("candidate-%02d", i))
+		text := fmt.Sprintf("Candidate %02d with enough extra text to demonstrate single-line truncation", i)
+		must(t, g.AddNodeWithID(id, text))
+	}
+
+	m := New("test.dagim", g)
+	m.current = "current"
+	m.mode = modePrompt
+	m.promptAction = promptAddChild
+	m.promptTitle = "Add/link child"
+	m.height = 16
+	m.width = 48
+
+	view := m.viewPrompt()
+	if !strings.Contains(view, "Matches 1-6 of 25") {
+		t.Fatalf("expected initial match window:\n%s", view)
+	}
+	if strings.Contains(view, "Candidate 07") {
+		t.Fatalf("rendered beyond visible window:\n%s", view)
+	}
+	if lines := strings.Count(view, "\n") + 1; lines > m.height {
+		t.Fatalf("view has %d lines, height %d:\n%s", lines, m.height, view)
+	}
+
+	m.suggestionCursor = 10
+	view = m.viewPrompt()
+	if !strings.Contains(view, "Matches 8-13 of 25") {
+		t.Fatalf("expected centered match window:\n%s", view)
+	}
+	if !strings.Contains(view, "Candidate 11") {
+		t.Fatalf("selected candidate not visible:\n%s", view)
 	}
 }
 
