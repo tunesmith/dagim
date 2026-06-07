@@ -127,14 +127,18 @@ func (m Model) viewPrompt() string {
 	b.WriteByte('\n')
 	b.WriteString(m.input.View())
 	if m.promptAction == promptAddParent || m.promptAction == promptAddChild {
-		results := m.searchResults(m.input.Value())
+		results := m.promptMatches()
 		b.WriteString("\n\n")
 		b.WriteString(titleStyle.Render("Matches"))
 		b.WriteByte('\n')
 		b.WriteString(m.rule())
 		b.WriteByte('\n')
 		if len(results) == 0 {
-			b.WriteString(mutedStyle.Render("  no matches; Enter creates a new node"))
+			if len(m.searchResults(m.input.Value())) == 0 {
+				b.WriteString(mutedStyle.Render("  no matches; Enter creates a new node"))
+			} else {
+				b.WriteString(mutedStyle.Render("  no eligible matches; existing links are hidden"))
+			}
 		} else {
 			for i, id := range results {
 				node, _ := m.g.Node(id)

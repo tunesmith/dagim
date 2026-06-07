@@ -20,3 +20,25 @@ node slice-andouille-sausage: Slice 12 ounces Andouille sausage
 node bring-water-to-boil: Bring water to boil
   parent put-hot-water-chicken-pot  # Put two quarts of hot water in the chicken pot
   parent put-chicken-thighs-pot  # Put two pounds of chicken thighs in the chicken pot
+
+node add-veggies-gumbo-pot-saute-until-tender: Add veggies to gumbo pot and saute until tender, about 8-10 minutes
+  parent cook-medium-heat-stirring-dark-brown-roux  # Cook over medium heat, frequently stirring to make a dark...
+  parent give-veggie-bowl-curt  # Give veggie bowl to Curt
+
+node give-veggie-bowl-curt: Give veggie bowl to Curt
+  parent dice-celery-veggie-bowl  # Dice 1/3 cup celery into veggie bowl
+  parent mince-2-cloves-garlic-veggie-bowl  # Mince 2 cloves garlic into veggie bowl
+  parent dice-green-red-bell-pepper-veggie-bowl  # Dice 1.5 cups green/red bell pepper into veggie bowl
+  parent dice-yellow-onion-veggie-bowl  # Dice 1.5 cups yellow onion into veggie bowl
+
+node dice-celery-veggie-bowl: Dice 1/3 cup celery into veggie bowl
+  parent prepare-rice-cooker-press-start  # Prepare rice in rice cooker and press start
+
+node mince-2-cloves-garlic-veggie-bowl: Mince 2 cloves garlic into veggie bowl
+  parent prepare-rice-cooker-press-start  # Prepare rice in rice cooker and press start
+
+node dice-green-red-bell-pepper-veggie-bowl: Dice 1.5 cups green/red bell pepper into veggie bowl
+  parent prepare-rice-cooker-press-start  # Prepare rice in rice cooker and press start
+
+node dice-yellow-onion-veggie-bowl: Dice 1.5 cups yellow onion into veggie bowl
+  parent prepare-rice-cooker-press-start  # Prepare rice in rice cooker and press start

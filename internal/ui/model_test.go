@@ -95,6 +95,73 @@ func TestInspectReturnsToPreviousMode(t *testing.T) {
 	}
 }
 
+func TestLinkPromptHidesDuplicateEdgeCandidates(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("parent", "Existing parent"))
+	must(t, g.AddNodeWithID("current", "Current"))
+	must(t, g.AddNodeWithID("child", "Existing child"))
+	must(t, g.AddNodeWithID("available", "Available"))
+	must(t, g.AddEdge("parent", "current"))
+	must(t, g.AddEdge("current", "child"))
+
+	m := New("test.dagim", g)
+	m.current = "current"
+
+	m.promptAction = promptAddParent
+	parentCandidates := m.linkCandidates("", promptAddParent)
+	if containsID(parentCandidates, "parent") {
+		t.Fatalf("already-linked parent was shown: %#v", parentCandidates)
+	}
+	if containsID(parentCandidates, "current") {
+		t.Fatalf("current node was shown as parent candidate: %#v", parentCandidates)
+	}
+	if !containsID(parentCandidates, "available") {
+		t.Fatalf("available node missing from parent candidates: %#v", parentCandidates)
+	}
+
+	m.promptAction = promptAddChild
+	childCandidates := m.linkCandidates("", promptAddChild)
+	if containsID(childCandidates, "child") {
+		t.Fatalf("already-linked child was shown: %#v", childCandidates)
+	}
+	if containsID(childCandidates, "current") {
+		t.Fatalf("current node was shown as child candidate: %#v", childCandidates)
+	}
+	if !containsID(childCandidates, "available") {
+		t.Fatalf("available node missing from child candidates: %#v", childCandidates)
+	}
+}
+
+func TestLinkPromptShowsNoEligibleMatchesMessage(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("parent", "Existing parent"))
+	must(t, g.AddNodeWithID("current", "Current"))
+	must(t, g.AddEdge("parent", "current"))
+
+	m := New("test.dagim", g)
+	m.current = "current"
+	m.promptAction = promptAddParent
+	m.promptTitle = "Add/link parent"
+	m.input.SetValue("Existing")
+
+	view := m.viewPrompt()
+	if !strings.Contains(view, "no eligible matches") {
+		t.Fatalf("expected no eligible matches message:\n%s", view)
+	}
+	if strings.Contains(view, "Existing parent") {
+		t.Fatalf("already-linked parent was shown:\n%s", view)
+	}
+}
+
+func containsID(ids []graph.NodeID, want graph.NodeID) bool {
+	for _, id := range ids {
+		if id == want {
+			return true
+		}
+	}
+	return false
+}
+
 func must(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {

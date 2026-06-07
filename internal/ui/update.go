@@ -165,7 +165,7 @@ func (m Model) updatePrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "down":
-		results := m.searchResults(m.input.Value())
+		results := m.promptMatches()
 		if m.suggestionCursor < len(results)-1 {
 			m.suggestionCursor++
 		}

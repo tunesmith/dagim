@@ -156,8 +156,41 @@ func (m Model) searchResults(query string) []graph.NodeID {
 	return ids
 }
 
+func (m Model) promptMatches() []graph.NodeID {
+	if m.promptAction != promptAddParent && m.promptAction != promptAddChild {
+		return m.searchResults(m.input.Value())
+	}
+	return m.linkCandidates(m.input.Value(), m.promptAction)
+}
+
+func (m Model) linkCandidates(query string, action promptAction) []graph.NodeID {
+	hidden := map[graph.NodeID]bool{}
+	if m.current != "" {
+		hidden[m.current] = true
+	}
+	switch action {
+	case promptAddParent:
+		parents, _ := m.g.ParentsOf(m.current)
+		for _, id := range parents {
+			hidden[id] = true
+		}
+	case promptAddChild:
+		children, _ := m.g.ChildrenOf(m.current)
+		for _, id := range children {
+			hidden[id] = true
+		}
+	}
+	var ids []graph.NodeID
+	for _, id := range m.searchResults(query) {
+		if !hidden[id] {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
 func (m Model) selectedSuggestion() (graph.NodeID, bool) {
-	results := m.searchResults(m.input.Value())
+	results := m.promptMatches()
 	if len(results) == 0 {
 		return "", false
 	}

@@ -542,12 +542,14 @@ A -> B
 
 Behavior:
 
-1. Prompt with autocomplete over existing node text.
+1. Prompt with autocomplete over eligible existing node text.
 2. If the selected text matches an existing node, use that node's ID.
 3. If the text does not match an existing node, offer to create a new node and generate an ID for it.
 4. Reject if the edge already exists.
 5. Reject if it would create a cycle.
 6. On success, keep focus on the current node unless user preference later says otherwise.
+
+The autocomplete list should hide the current node and nodes that are already linked in the requested direction. This is a usability filter; graph operations must still reject duplicate edges and cycles.
 
 ### 12.3 Add Child
 
