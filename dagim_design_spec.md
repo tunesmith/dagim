@@ -461,7 +461,6 @@ Parents
 Current node
 ========================================
 Graph reticence is a UI problem
-graph-reticence-ui-problem
 
 Children
 ────────────────────────────────────────
@@ -470,8 +469,9 @@ Children
 Commands
 ────────────────────────────────────────
 a add node    p add parent    c add child    x unlink
-r rename      d delete        / search       m sequence
-f roots       w save          R rewrite      q quit
+i inspect     r rename        d delete       / search
+f roots       m sequence      J/K reorder    w save
+R rewrite     q quit          ? help
 ```
 
 ### 11.1 Node View Behavior
@@ -487,7 +487,10 @@ The user should be able to:
 7. Add/link an existing or new child.
 8. Unlink an existing parent or child.
 9. Search all nodes by text.
-10. Save.
+10. Inspect a node to see details such as its ID.
+11. Save.
+
+Normal node, roots, search, and sequence lists should show node text without inline IDs. Long node text should wrap to the terminal width. Node IDs should be available through inspect views, not through the main scanning surfaces.
 
 ### 11.2 Suggested Keybindings
 
@@ -503,6 +506,7 @@ a             add node
 p             add/link parent to current node
 c             add/link child to current node
 x             unlink selected relationship
+i             inspect selected node, or current node if no relationship is selected
 r             rename current node
 d             delete current node, with confirmation if it has edges
 f             show roots view

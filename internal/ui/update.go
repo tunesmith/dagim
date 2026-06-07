@@ -79,6 +79,10 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.current = items[m.cursor].id
 			m.cursor = 0
 		}
+	case "i":
+		m.inspectID = m.selectedNodeOrCurrent(items)
+		m.previous = modeNode
+		m.mode = modeInspect
 	case "a":
 		return m.setPrompt(promptAddNode, "Add node", "")
 	case "p":
@@ -262,6 +266,16 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeNode
 		}
 		return m, nil
+	case "i":
+		if len(results) > 0 {
+			if m.searchCursor >= len(results) {
+				m.searchCursor = len(results) - 1
+			}
+			m.inspectID = results[m.searchCursor]
+			m.previous = modeSearch
+			m.mode = modeInspect
+		}
+		return m, nil
 	}
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
@@ -287,6 +301,15 @@ func (m Model) updateRoots(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.current = roots[m.rootsCursor]
 			m.cursor = 0
 			m.mode = modeNode
+		}
+	case "i":
+		if len(roots) > 0 {
+			if m.rootsCursor >= len(roots) {
+				m.rootsCursor = len(roots) - 1
+			}
+			m.inspectID = roots[m.rootsCursor]
+			m.previous = modeRoots
+			m.mode = modeInspect
 		}
 	case "/":
 		return m.setSearch()
@@ -328,6 +351,7 @@ func (m Model) updateSequence(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.cursor = len(available) - 1
 			}
 			m.inspectID = available[m.cursor]
+			m.previous = modeSequence
 			m.mode = modeInspect
 		}
 	case "u":
@@ -346,9 +370,16 @@ func (m Model) updateSequence(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) updateInspect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc", "enter":
-		m.mode = modeSequence
+		m.mode = m.previous
 	}
 	return m, nil
+}
+
+func (m Model) selectedNodeOrCurrent(items []relationItem) graph.NodeID {
+	if len(items) > 0 && m.cursor >= 0 && m.cursor < len(items) {
+		return items[m.cursor].id
+	}
+	return m.current
 }
 
 func (m Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

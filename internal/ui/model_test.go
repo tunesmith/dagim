@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"dagim/internal/graph"
 )
 
@@ -40,6 +42,56 @@ func TestRewriteRegeneratesIDsAndSaves(t *testing.T) {
 	}
 	if !strings.Contains(text, "parent gumbo-pot-combine-butter-white-rice-flour") {
 		t.Fatalf("parent reference was not rewritten:\n%s", text)
+	}
+}
+
+func TestNodeViewWrapsTextAndHidesIDs(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("parent-node-id", "Parent node"))
+	must(t, g.AddNodeWithID("current-node-id", "Current node"))
+	must(t, g.AddNodeWithID("long-child-id", "This child node has enough words to wrap in a narrow terminal display"))
+	must(t, g.AddEdge("parent-node-id", "current-node-id"))
+	must(t, g.AddEdge("current-node-id", "long-child-id"))
+
+	m := New("test.dagim", g)
+	m.current = "current-node-id"
+	m.width = 34
+	view := m.viewNode()
+
+	for _, hidden := range []string{"parent-node-id", "current-node-id", "long-child-id"} {
+		if strings.Contains(view, hidden) {
+			t.Fatalf("main node view exposed ID %q:\n%s", hidden, view)
+		}
+	}
+	if !strings.Contains(view, "This child node has enough") || !strings.Contains(view, "  words to wrap") {
+		t.Fatalf("expected wrapped child text:\n%s", view)
+	}
+}
+
+func TestInspectShowsIDs(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("current-node-id", "Current node"))
+	m := New("test.dagim", g)
+	m.inspectID = "current-node-id"
+	m.mode = modeInspect
+	view := m.View()
+
+	if !strings.Contains(view, "current-node-id") {
+		t.Fatalf("inspect should expose ID:\n%s", view)
+	}
+}
+
+func TestInspectReturnsToPreviousMode(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("current-node-id", "Current node"))
+	m := New("test.dagim", g)
+	m.mode = modeInspect
+	m.previous = modeNode
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated := next.(Model)
+	if updated.mode != modeNode {
+		t.Fatalf("mode = %v", updated.mode)
 	}
 }
 
