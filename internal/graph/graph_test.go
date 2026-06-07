@@ -24,6 +24,25 @@ func TestAddNodeGeneratesReadableUniqueID(t *testing.T) {
 	}
 }
 
+func TestSlugifyCompactsLongRecipeSteps(t *testing.T) {
+	tests := map[string]string{
+		"In gumbo pot, combine 1/2 cup butter and 1/2 cup white rice flour":         "gumbo-pot-combine-butter-white-rice-flour",
+		"Prepare rice in rice cooker and press start":                               "prepare-rice-cooker-press-start",
+		"Put two quarts of hot water in the chicken pot":                            "put-hot-water-chicken-pot",
+		"Cook over medium heat, frequently stirring to make a dark brown roux":      "cook-medium-heat-stirring-dark-brown-roux",
+		"Slice 12 ounces Andouille sausage":                                         "slice-andouille-sausage",
+		"Review RFC #42":                                                            "review-rfc-42",
+		"Investigate extraordinarilylongwordthatexceedstheindividualtokenlimit now": "investigate-extraordinarilylongwordt-now",
+	}
+	for input, want := range tests {
+		t.Run(input, func(t *testing.T) {
+			if got := Slugify(input); got != want {
+				t.Fatalf("Slugify(%q) = %q, want %q", input, got, want)
+			}
+		})
+	}
+}
+
 func TestSlugifyFallback(t *testing.T) {
 	g := New()
 	id, err := g.AddNode("!!!")
@@ -52,6 +71,34 @@ func TestRenamePreservesIDAndEdges(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(parents, []NodeID{"a"}) {
+		t.Fatalf("parents = %#v", parents)
+	}
+}
+
+func TestRekeyByTextRegeneratesIDsAndPreservesEdges(t *testing.T) {
+	g := mustGraph(t,
+		"in-gumbo-pot-combine-1-2-cup-butter-and-1-2-cup-white-rice-flour", "In gumbo pot, combine 1/2 cup butter and 1/2 cup white rice flour",
+		"cook-over-medium-heat-frequently-stirring-to-make-a-dark-brown-roux-about-15-minutes", "Cook over medium heat, frequently stirring to make a dark brown roux, about 15 minutes",
+	)
+	mustAddEdge(t, g,
+		"in-gumbo-pot-combine-1-2-cup-butter-and-1-2-cup-white-rice-flour",
+		"cook-over-medium-heat-frequently-stirring-to-make-a-dark-brown-roux-about-15-minutes",
+	)
+	mapping, err := g.RekeyByText()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mapping["in-gumbo-pot-combine-1-2-cup-butter-and-1-2-cup-white-rice-flour"] != "gumbo-pot-combine-butter-white-rice-flour" {
+		t.Fatalf("mapping = %#v", mapping)
+	}
+	if mapping["cook-over-medium-heat-frequently-stirring-to-make-a-dark-brown-roux-about-15-minutes"] != "cook-medium-heat-stirring-dark-brown-roux" {
+		t.Fatalf("mapping = %#v", mapping)
+	}
+	parents, err := g.ParentsOf("cook-medium-heat-stirring-dark-brown-roux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(parents, []NodeID{"gumbo-pot-combine-butter-white-rice-flour"}) {
 		t.Fatalf("parents = %#v", parents)
 	}
 }

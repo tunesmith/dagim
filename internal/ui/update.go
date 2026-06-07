@@ -32,6 +32,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateInspect(msg)
 		case modeConfirmDelete:
 			return m.updateConfirmDelete(msg)
+		case modeConfirmRewrite:
+			return m.updateConfirmRewrite(msg)
 		case modeConfirmQuit:
 			return m.updateConfirmQuit(msg)
 		case modeHelp:
@@ -133,6 +135,8 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.cursor = 0
 	case "w":
 		m = m.save()
+	case "R":
+		m.mode = modeConfirmRewrite
 	case "?":
 		m.mode = modeHelp
 	case "q", "ctrl+c":
@@ -351,6 +355,17 @@ func (m Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y", "Y":
 		m = m.deleteCurrent()
+		m.mode = modeNode
+	case "n", "N", "esc":
+		m.mode = modeNode
+	}
+	return m, nil
+}
+
+func (m Model) updateConfirmRewrite(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "Y":
+		m = m.rewrite()
 		m.mode = modeNode
 	case "n", "N", "esc":
 		m.mode = modeNode

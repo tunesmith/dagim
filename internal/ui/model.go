@@ -23,6 +23,7 @@ const (
 	modeSequence
 	modeInspect
 	modeConfirmDelete
+	modeConfirmRewrite
 	modeConfirmQuit
 	modeHelp
 )
@@ -223,6 +224,33 @@ func (m Model) save() Model {
 	}
 	m.dirty = false
 	m.message = "saved " + m.path
+	return m
+}
+
+func (m Model) rewrite() Model {
+	current := m.current
+	mapping, err := m.g.RekeyByText()
+	if err != nil {
+		m.message = err.Error()
+		return m
+	}
+	if err := dagimfile.SaveAtomic(m.path, m.g); err != nil {
+		m.dirty = true
+		m.message = err.Error()
+		return m
+	}
+	changed := 0
+	for oldID, newID := range mapping {
+		if oldID != newID {
+			changed++
+		}
+	}
+	m.dirty = false
+	m.message = fmt.Sprintf("rewrote %s (%d IDs changed)", m.path, changed)
+	if nextCurrent, ok := mapping[current]; ok {
+		m.current = nextCurrent
+	}
+	m = m.ensureCurrent()
 	return m
 }
 

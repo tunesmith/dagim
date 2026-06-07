@@ -90,6 +90,8 @@ Examples:
 ```text
 People think in graphs -> people-think-in-graphs
 Existing tools bias trees -> existing-tools-bias-trees
+In gumbo pot, combine 1/2 cup butter and 1/2 cup white rice flour -> gumbo-pot-combine-butter-white-rice-flour
+Prepare rice in rice cooker and press start -> prepare-rice-cooker-press-start
 People think in graphs -> people-think-in-graphs-2
 ```
 
@@ -263,12 +265,15 @@ Rules:
 Node IDs should be readable ASCII slugs generated from the initial node text:
 
 1. Lowercase where practical.
-2. Replace runs of whitespace and punctuation with `-`.
-3. Trim leading and trailing `-`.
-4. If no useful slug remains, use `node`.
-5. If the slug already exists, append `-2`, `-3`, and so on.
+2. Tokenize words and numbers.
+3. Drop low-information words for longer labels.
+4. Drop common measurement quantities and units when they are likely to be incidental to identity.
+5. Deduplicate repeated tokens.
+6. Cap generated IDs to a compact readable length.
+7. If no useful slug remains, use `node`.
+8. If the slug already exists, append `-2`, `-3`, and so on.
 
-The implementation may refine slugification for Unicode text, but the generated ID must be stable, readable, and unique within the file.
+The implementation may refine slugification for Unicode text, but the generated ID must be stable, readable, compact, and unique within the file.
 
 ### 7.4 Comments
 
@@ -283,6 +288,8 @@ On parent lines, `#` begins an optional readability hint:
 ```text
 parent graph-reticence-ui-problem  # Graph reticence is a UI problem
 ```
+
+Canonical output may shorten long parent hints. Hints are for source readability only and do not affect parsing or graph identity.
 
 A `#` inside node text is ordinary text:
 
@@ -314,8 +321,9 @@ Canonical serialization rules:
 4. Emit parent references under the child node.
 5. Sort parent references by file order, not alphabetically.
 6. Emit current parent text hints in canonical parent lines.
-7. Separate node blocks with one blank line.
-8. End the file with a newline.
+7. Shorten long parent text hints to keep source and diffs readable.
+8. Separate node blocks with one blank line.
+9. End the file with a newline.
 
 ### 7.6 Why Parent References Only
 
@@ -414,6 +422,8 @@ Do not implement optional later options unless the version 1 implementation is a
 4. Report whether the file differs from canonical formatting, without modifying it.
 5. Exit nonzero on parse, validation, or canonical-format errors if a strict/check mode is later added; v1 may exit zero for valid but noncanonical files if it clearly reports the formatting status.
 
+Normal TUI save should preserve existing node IDs. Rekeying is an explicit migration/refactor operation because node IDs are stable identity.
+
 ## 10. TUI Overview
 
 The TUI should optimize for keyboard-first editing and navigation.
@@ -461,7 +471,7 @@ Commands
 ────────────────────────────────────────
 a add node    p add parent    c add child    x unlink
 r rename      d delete        / search       m sequence
-f roots       w save          ? help         q quit
+f roots       w save          R rewrite      q quit
 ```
 
 ### 11.1 Node View Behavior
@@ -499,6 +509,7 @@ f             show roots view
 J / K         move current node later/earlier in file order
 m             enter manual sequence mode
 w             write/save file
+R             rewrite file: regenerate IDs, update references, save canonical format
 ?             help
 q             quit, prompting if unsaved changes exist
 ```
@@ -1136,7 +1147,11 @@ The user can move a node earlier or later in persistent file order without chang
 
 `dagim --check FILE` validates the file without opening the TUI and prints useful graph stats on success.
 
-### 25.16 Manual Sequence Mode
+### 25.16 Rewrite Command
+
+From inside the TUI, `R` asks for confirmation, regenerates node IDs from current node text, updates parent references, writes current canonical format, and saves the file.
+
+### 25.17 Manual Sequence Mode
 
 Given graph:
 
@@ -1151,11 +1166,11 @@ If the user picks `A`, then `B` remains available and `C` remains unavailable.
 
 If the user then picks `B`, `C` becomes available.
 
-### 25.17 Manual Sequence Undo
+### 25.18 Manual Sequence Undo
 
 The user can undo the most recent pick and the available set is recomputed correctly.
 
-### 25.18 Manual Sequence Export
+### 25.19 Manual Sequence Export
 
 The user can export the current or completed manual sequence as one node per line.
 
@@ -1219,6 +1234,8 @@ The user can export the current or completed manual sequence as one node per lin
 
 These are intentionally out of scope for version 1.
 
+See `dagim_future_ideas.md` for the active backlog of deferred ideas.
+
 1. DOT/Graphviz export.
 2. SVG or PNG graph rendering.
 3. Edge labels.
@@ -1238,7 +1255,7 @@ These are intentionally out of scope for version 1.
 17. “What would this unblock?” preview.
 18. Optional automatic topological sort export, explicitly labeled as arbitrary among ties.
 19. Graph statistics.
-20. Explicit node ID rekey command.
+20. Interactive selective node ID rekey command.
 21. Persistent completion or processed state.
 
 ## 28. Open Decisions
@@ -1271,7 +1288,7 @@ Start with correctness before UI polish:
 2. Implement parser and serializer for `.dagim` files.
 3. Add unit tests for parser, serializer, graph operations, validation, reordering, slug generation, and manual sequence state.
 4. Implement CLI entrypoints `dagim FILE` and `dagim --check FILE`.
-5. Implement the TUI with node view, search, roots view, file-order reordering, and manual sequence mode.
+5. Implement the TUI with node view, search, roots view, file-order reordering, whole-file rewrite/rekey, and manual sequence mode.
 6. Ensure cycle rejection and rename behavior are correct.
 7. Ensure saving writes stable canonical diffs with visible node IDs and refreshed parent text hints.
 

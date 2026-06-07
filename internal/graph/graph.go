@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"unicode"
 )
 
 type NodeID string
@@ -118,6 +117,37 @@ func (g *Graph) RenameNode(id NodeID, newText string) error {
 	node.Text = newText
 	g.nodes[id] = node
 	return nil
+}
+
+func (g *Graph) RekeyByText() (map[NodeID]NodeID, error) {
+	next := New()
+	mapping := make(map[NodeID]NodeID, len(g.nodes))
+	for _, oldID := range g.order {
+		node := g.nodes[oldID]
+		newID := next.UniqueID(node.Text)
+		if err := next.AddNodeWithID(newID, node.Text); err != nil {
+			return nil, err
+		}
+		mapping[oldID] = newID
+	}
+	for _, oldChild := range g.order {
+		newChild := mapping[oldChild]
+		parents, err := g.ParentsOf(oldChild)
+		if err != nil {
+			return nil, err
+		}
+		for _, oldParent := range parents {
+			newParent, ok := mapping[oldParent]
+			if !ok {
+				return nil, fmt.Errorf("%w: %s", ErrUnknownNode, oldParent)
+			}
+			if err := next.AddEdge(newParent, newChild); err != nil {
+				return nil, err
+			}
+		}
+	}
+	*g = *next
+	return mapping, nil
 }
 
 func (g *Graph) DeleteNode(id NodeID) error {
@@ -308,27 +338,6 @@ func (g *Graph) UniqueID(text string) NodeID {
 			return candidate
 		}
 	}
-}
-
-func Slugify(text string) string {
-	text = strings.ToLower(strings.TrimSpace(text))
-	var b strings.Builder
-	lastDash := false
-	for _, r := range text {
-		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
-			b.WriteRune(r)
-			lastDash = false
-			continue
-		}
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			continue
-		}
-		if !lastDash && b.Len() > 0 {
-			b.WriteByte('-')
-			lastDash = true
-		}
-	}
-	return strings.Trim(b.String(), "-")
 }
 
 func ValidID(id NodeID) bool {

@@ -1,0 +1,22 @@
+# dagim v1
+
+node gumbo-pot-combine-butter-white-rice-flour: In gumbo pot, combine 1/2 cup butter and 1/2 cup white rice flour
+
+node prepare-rice-cooker-press-start: Prepare rice in rice cooker and press start
+
+node put-hot-water-chicken-pot: Put two quarts of hot water in the chicken pot
+  parent gumbo-pot-combine-butter-white-rice-flour  # In gumbo pot, combine 1/2 cup butter and 1/2 cup white rice...
+
+node put-chicken-thighs-pot: Put two pounds of chicken thighs in the chicken pot
+  parent gumbo-pot-combine-butter-white-rice-flour  # In gumbo pot, combine 1/2 cup butter and 1/2 cup white rice...
+
+node cook-medium-heat-stirring-dark-brown-roux: Cook over medium heat, frequently stirring to make a dark brown roux, about 15 minutes
+  parent gumbo-pot-combine-butter-white-rice-flour  # In gumbo pot, combine 1/2 cup butter and 1/2 cup white rice...
+
+node slice-andouille-sausage: Slice 12 ounces Andouille sausage
+  parent put-hot-water-chicken-pot  # Put two quarts of hot water in the chicken pot
+  parent put-chicken-thighs-pot  # Put two pounds of chicken thighs in the chicken pot
+
+node bring-water-to-boil: Bring water to boil
+  parent put-hot-water-chicken-pot  # Put two quarts of hot water in the chicken pot
+  parent put-chicken-thighs-pot  # Put two pounds of chicken thighs in the chicken pot

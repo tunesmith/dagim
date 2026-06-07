@@ -35,6 +35,8 @@ func (m Model) View() string {
 		body = m.viewInspect()
 	case modeConfirmDelete:
 		body = m.viewConfirmDelete()
+	case modeConfirmRewrite:
+		body = m.viewConfirmRewrite()
 	case modeConfirmQuit:
 		body = m.viewConfirmQuit()
 	case modeHelp:
@@ -113,7 +115,9 @@ func (m Model) viewNode() string {
 	b.WriteByte('\n')
 	b.WriteString(commandStyle.Render("r rename      d delete        / search       m sequence"))
 	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("f roots       J/K reorder     w save         q quit    ? help"))
+	b.WriteString(commandStyle.Render("f roots       J/K reorder     w save         R rewrite"))
+	b.WriteByte('\n')
+	b.WriteString(commandStyle.Render("q quit        ? help"))
 	return b.String()
 }
 
@@ -273,6 +277,17 @@ func (m Model) viewConfirmDelete() string {
 		commandStyle.Render("y delete    n cancel"))
 }
 
+func (m Model) viewConfirmRewrite() string {
+	return strings.Join([]string{
+		titleStyle.Render("Rewrite file?"),
+		rule(),
+		"This regenerates node IDs from current text, updates parent references,",
+		"writes the current canonical format, and saves the file.",
+		"",
+		commandStyle.Render("y rewrite and save    n cancel"),
+	}, "\n")
+}
+
 func (m Model) viewConfirmQuit() string {
 	return strings.Join([]string{
 		titleStyle.Render("Unsaved changes."),
@@ -290,7 +305,8 @@ func (m Model) viewHelp() string {
 		"a add node        p add/link parent    c add/link child",
 		"x unlink          r rename             d delete",
 		"/ search          f roots              m manual sequence",
-		"J/K reorder       w save               q quit",
+		"J/K reorder       w save               R rewrite file",
+		"q quit",
 		"",
 		"In parent/child prompts, Enter links the selected match and Ctrl+N creates the typed text.",
 		"Manual sequence is temporary; export writes one node text per line.",

@@ -118,6 +118,25 @@ node c: C
 	}
 }
 
+func TestSerializeShortensParentHints(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("roux-base", "In gumbo pot, combine 1/2 cup butter and 1/2 cup white rice flour"))
+	must(t, g.AddNodeWithID("cook-roux", "Cook roux"))
+	must(t, g.AddEdge("roux-base", "cook-roux"))
+
+	got := Serialize(g)
+	parentLine := ""
+	for _, line := range strings.Split(got, "\n") {
+		if strings.Contains(line, "parent roux-base") {
+			parentLine = line
+			break
+		}
+	}
+	if parentLine != "  parent roux-base  # In gumbo pot, combine 1/2 cup butter and 1/2 cup white rice..." {
+		t.Fatalf("missing shortened parent hint:\n%s", got)
+	}
+}
+
 func TestCheckReportsCanonicalFormatting(t *testing.T) {
 	input := "node a: A\n"
 	result, err := Check(input)

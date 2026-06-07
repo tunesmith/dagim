@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"dagim/internal/graph"
 )
@@ -122,11 +123,29 @@ func Serialize(g *graph.Graph) string {
 			b.WriteString("  parent ")
 			b.WriteString(string(parentID))
 			b.WriteString("  # ")
-			b.WriteString(parent.Text)
+			b.WriteString(Hint(parent.Text))
 			b.WriteByte('\n')
 		}
 	}
 	return b.String()
+}
+
+const maxHintRunes = 64
+
+func Hint(text string) string {
+	text = strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
+	runes := []rune(text)
+	if len(runes) <= maxHintRunes {
+		return text
+	}
+	cut := maxHintRunes - 3
+	for cut > 40 && !unicode.IsSpace(runes[cut]) {
+		cut--
+	}
+	if cut <= 40 {
+		cut = maxHintRunes - 3
+	}
+	return strings.TrimSpace(string(runes[:cut])) + "..."
 }
 
 func Check(input string) (*CheckResult, error) {
