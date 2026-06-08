@@ -776,6 +776,20 @@ func TestSearchTreatsPrintableKeysAsInput(t *testing.T) {
 	}
 }
 
+func TestSearchDoesNotMatchHiddenIDAfterEdit(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("shred-chicken-give-curt", "Shred or cut chicken into small pieces, give to Curt"))
+	m := New("test.dagim", g)
+	m.mode = modeNode
+	m.current = "shred-chicken-give-curt"
+
+	must(t, g.EditNodeText("shred-chicken-give-curt", "Shred or cut chicken into small pieces"))
+
+	if results := m.searchResults("Curt"); len(results) != 0 {
+		t.Fatalf("results = %v", results)
+	}
+}
+
 func TestReadyHelpEscReturnsToReady(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))

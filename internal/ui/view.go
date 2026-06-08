@@ -135,8 +135,8 @@ func (m Model) viewNode() string {
 	b.WriteString(m.rule())
 	b.WriteByte('\n')
 	b.WriteString(renderCommandGrid([][]string{
-		{"a add node", "p add parent", "c add child", "x unlink"},
-		{"i inspect", "e edit", "d delete", "/ search"},
+		{"a add node", "p add parent", "c add child", "x unlink selected"},
+		{"i inspect", "e edit", "d delete node", "/ search"},
 		{"r ready", "l leaves", "o order", "s save"},
 		{"Space done/undone", "v completed", "R reset", "W rewrite"},
 		{"J/K reorder", "C check", "q quit", "? help"},
@@ -416,11 +416,11 @@ func (m Model) viewInspect() string {
 
 func (m Model) viewConfirmDelete() string {
 	node, _ := m.g.Node(m.current)
-	return fmt.Sprintf("%s\n%s\n%s\n\n%s",
-		titleStyle.Render("Delete connected node?"),
+	return fmt.Sprintf("%s\n%s\nCurrent node:\n%s\n\nThis removes the node and all links to and from it.\n\n%s",
+		titleStyle.Render("Delete current node?"),
 		m.rule(),
 		node.Text,
-		commandStyle.Render("y delete    n cancel"))
+		commandStyle.Render("y delete node    n cancel"))
 }
 
 func (m Model) viewConfirmRewrite() string {
@@ -461,8 +461,8 @@ func (m Model) viewHelp() string {
 		"Non-empty files open to ready. Enter focuses a selected node.",
 		"",
 		"a add node        p add/link parent    c add/link child",
-		"x unlink          i inspect            e edit",
-		"d delete          / search             r ready",
+		"x unlink selected i inspect            e edit",
+		"d delete node     / search             r ready",
 		"l leaves          o order remaining    J/K reorder",
 		"Space done/undone v completed          s save",
 		"R reset done      W rewrite file       C check",

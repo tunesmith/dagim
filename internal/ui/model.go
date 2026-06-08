@@ -167,7 +167,7 @@ func (m Model) searchResults(query string) []graph.NodeID {
 	query = strings.ToLower(strings.TrimSpace(query))
 	var ids []graph.NodeID
 	for _, node := range m.g.Nodes() {
-		if query == "" || strings.Contains(strings.ToLower(node.Text), query) || strings.Contains(strings.ToLower(string(node.ID)), query) {
+		if query == "" || strings.Contains(strings.ToLower(node.Text), query) {
 			ids = append(ids, node.ID)
 		}
 	}

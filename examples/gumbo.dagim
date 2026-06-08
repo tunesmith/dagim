@@ -49,20 +49,25 @@ node saute-sliced-sausage-until-lightly-browned: Saute sliced sausage until ligh
 node simmer-chicken-until-fully-cooked: Simmer chicken until fully cooked, 20-25 minutes
   parent bring-water-to-boil  # Bring water to boil
 
-node drain-2-cans-total-diced-canned-tomatoes-give: Drain 2 cans (28 oz total) diced canned tomatoes, give to Curt
+node drain-2-cans-total-diced-canned-tomatoes-give: Drain 2 cans (28 oz total) diced canned tomatoes
   parent give-veggie-bowl-curt  # Give veggie bowl to Curt
 
 node add-tomatoes-sausage-gumbo-pot: Add tomatoes and sausage to gumbo pot
   parent add-veggies-gumbo-pot-saute-until-tender  # Add veggies to gumbo pot and saute until tender, about 8-10...
   parent saute-sliced-sausage-until-lightly-browned  # Saute sliced sausage until lightly browned
-  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes, give to Curt
+  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes
 
 node cook-for-stirring-occasionally: Cook for 10 minutes, stirring occasionally.
   parent add-tomatoes-sausage-gumbo-pot  # Add tomatoes and sausage to gumbo pot
 
 node add-contents-spice-bowl-gumbo-pot: Add contents of spice bowl to gumbo pot
   parent cook-for-stirring-occasionally  # Cook for 10 minutes, stirring occasionally.
-  parent give-spice-bowl-curt  # Give spice bowl to Curt
+  parent add-cayenne-spice-bowl  # Add 1 tsp cayenne to spice bowl
+  parent add-one-bay-leaf-spice-bowl  # Add one bay leaf to spice bowl
+  parent add-salt-spice-bowl  # Add 1 tsp salt to spice bowl
+  parent add-basil-spice-bowl  # Add 1 tsp basil to spice bowl
+  parent add-black-pepper-spice-bowl  # Add 1/2 tsp black pepper to spice bowl
+  parent add-thyme-spice-bowl  # Add 1 tsp thyme to spice bowl
 
 node add-reserved-chicken-water-gumbo-pot-simmer-loosely: Add 4 cups of reserved chicken water to gumbo pot and simmer for 30 minutes loosely covered, stirring occasionally
   parent add-contents-spice-bowl-gumbo-pot  # Add contents of spice bowl to gumbo pot
@@ -70,7 +75,7 @@ node add-reserved-chicken-water-gumbo-pot-simmer-loosely: Add 4 cups of reserved
 
 node add-chicken: Add chicken
   parent add-reserved-chicken-water-gumbo-pot-simmer-loosely  # Add 4 cups of reserved chicken water to gumbo pot and simmer...
-  parent shred-cut-chicken-small-pieces-give-curt  # Shred or cut chicken into small pieces, give to Curt
+  parent shred-cut-chicken-small-pieces-give-curt  # Shred or cut chicken into small pieces
 
 node simmer-an-additional: Simmer an additional 15 minutes
   parent add-chicken  # Add chicken
@@ -86,34 +91,25 @@ node serve-over-steamed-rice: Serve over steamed rice
   parent slow-stir-gumbo-file  # Slow stir in 1 TBSP gumbo file
 
 node add-cayenne-spice-bowl: Add 1 tsp cayenne to spice bowl
-  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes, give to Curt
+  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes
 
 node add-one-bay-leaf-spice-bowl: Add one bay leaf to spice bowl
-  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes, give to Curt
+  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes
 
 node add-salt-spice-bowl: Add 1 tsp salt to spice bowl
-  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes, give to Curt
+  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes
 
 node add-basil-spice-bowl: Add 1 tsp basil to spice bowl
-  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes, give to Curt
+  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes
 
 node add-black-pepper-spice-bowl: Add 1/2 tsp black pepper to spice bowl
-  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes, give to Curt
+  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes
 
 node add-thyme-spice-bowl: Add 1 tsp thyme to spice bowl
-  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes, give to Curt
-
-node give-spice-bowl-curt: Give spice bowl to Curt
-  parent add-cayenne-spice-bowl  # Add 1 tsp cayenne to spice bowl
-  parent add-one-bay-leaf-spice-bowl  # Add one bay leaf to spice bowl
-  parent add-salt-spice-bowl  # Add 1 tsp salt to spice bowl
-  parent add-basil-spice-bowl  # Add 1 tsp basil to spice bowl
-  parent add-black-pepper-spice-bowl  # Add 1/2 tsp black pepper to spice bowl
-  parent add-thyme-spice-bowl  # Add 1 tsp thyme to spice bowl
+  parent drain-2-cans-total-diced-canned-tomatoes-give  # Drain 2 cans (28 oz total) diced canned tomatoes
 
 node remove-chicken-reserve-water: Remove chicken and RESERVE WATER
   parent simmer-chicken-until-fully-cooked  # Simmer chicken until fully cooked, 20-25 minutes
-  parent give-spice-bowl-curt  # Give spice bowl to Curt
 
-node shred-cut-chicken-small-pieces-give-curt: Shred or cut chicken into small pieces, give to Curt
+node shred-cut-chicken-small-pieces-give-curt: Shred or cut chicken into small pieces
   parent remove-chicken-reserve-water  # Remove chicken and RESERVE WATER
