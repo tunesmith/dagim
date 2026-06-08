@@ -99,6 +99,7 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeInspect
 	case "C":
 		m.previous = modeNode
+		m.checkScroll = 0
 		m.mode = modeCheck
 	case "a":
 		return m.setPrompt(promptAddNode, "Add node", "")
@@ -350,6 +351,7 @@ func (m Model) updateReady(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "C":
 		m.previous = modeReady
+		m.checkScroll = 0
 		m.mode = modeCheck
 	case "/":
 		return m.setSearch()
@@ -434,6 +436,7 @@ func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "C":
 		m.previous = modeLeaves
+		m.checkScroll = 0
 		m.mode = modeCheck
 	case "/":
 		return m.setSearch()
@@ -512,6 +515,7 @@ func (m Model) updateOrder(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "C":
 		m.previous = modeOrder
+		m.checkScroll = 0
 		m.mode = modeCheck
 	case "u":
 		if !m.order.Undo() {
@@ -535,7 +539,30 @@ func (m Model) updateInspect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateCheck(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	maxScroll := m.checkScrollMax()
 	switch msg.String() {
+	case "j", "down":
+		if m.checkScroll < maxScroll {
+			m.checkScroll++
+		}
+	case "k", "up":
+		if m.checkScroll > 0 {
+			m.checkScroll--
+		}
+	case "pgdown":
+		m.checkScroll += m.checkScrollPageSize()
+		if m.checkScroll > maxScroll {
+			m.checkScroll = maxScroll
+		}
+	case "pgup":
+		m.checkScroll -= m.checkScrollPageSize()
+		if m.checkScroll < 0 {
+			m.checkScroll = 0
+		}
+	case "home":
+		m.checkScroll = 0
+	case "end":
+		m.checkScroll = maxScroll
 	case "esc", "enter", "q":
 		m.mode = m.previous
 	}

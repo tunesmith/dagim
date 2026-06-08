@@ -73,6 +73,7 @@ type Model struct {
 	leavesCursor  int
 	leavesReturn  mode
 	searchCursor  int
+	checkScroll   int
 	showCompleted bool
 
 	dirty   bool
@@ -224,14 +225,20 @@ func (m Model) linkWouldCycle(candidate graph.NodeID, action promptAction) bool 
 }
 
 func (m Model) promptMatchWindow(total int) (int, int) {
+	return windowAroundCursor(total, m.suggestionCursor, m.promptMatchLimit())
+}
+
+func (m Model) searchResultWindow(total int) (int, int) {
+	return windowAroundCursor(total, m.searchCursor, m.searchResultLimit())
+}
+
+func windowAroundCursor(total, cursor, limit int) (int, int) {
 	if total <= 0 {
 		return 0, 0
 	}
-	limit := m.promptMatchLimit()
 	if limit >= total {
 		return 0, total
 	}
-	cursor := m.suggestionCursor
 	if cursor < 0 {
 		cursor = 0
 	}
@@ -259,6 +266,21 @@ func (m Model) promptMatchLimit() int {
 	}
 	if limit > maxMatches {
 		return maxMatches
+	}
+	return limit
+}
+
+func (m Model) searchResultLimit() int {
+	const maxResults = 24
+	if m.height <= 0 {
+		return 18
+	}
+	limit := m.height - 6
+	if limit < 3 {
+		return 3
+	}
+	if limit > maxResults {
+		return maxResults
 	}
 	return limit
 }
@@ -514,6 +536,20 @@ func (m Model) rewrite() Model {
 	}
 	m = m.ensureCurrent()
 	return m
+}
+
+func (m Model) rekeyChanges() (map[graph.NodeID]graph.NodeID, int, error) {
+	mapping, err := m.g.RekeyPreview()
+	if err != nil {
+		return nil, 0, err
+	}
+	changed := 0
+	for oldID, newID := range mapping {
+		if oldID != newID {
+			changed++
+		}
+	}
+	return mapping, changed, nil
 }
 
 func (m Model) exportOrder(path string) Model {

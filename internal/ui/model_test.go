@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"dagim/internal/graph"
 )
@@ -143,15 +144,79 @@ func TestCheckViewReportsStatsAndTransitiveEdges(t *testing.T) {
 	for _, want := range []string{
 		"Check",
 		"valid: yes",
+		"W rewrite ID changes: 0",
 		"nodes: 4",
 		"edges: 4",
 		"transitive edges: 1",
-		"A -> D",
-		"via a -> b -> c -> d",
+		"1. A",
+		"-> D",
+		"via alternate path (3 edges)",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("missing %q:\n%s", want, view)
 		}
+	}
+}
+
+func TestCheckViewReportsRewriteIDChanges(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("old-id", "Better node text"))
+	must(t, g.AddNodeWithID("other-old-id", "Other better node text"))
+	m := newTestModel(t, g)
+	m.mode = modeCheck
+
+	view := m.View()
+	for _, want := range []string{
+		"W rewrite ID changes: 2",
+		"W rewrite ID changes",
+		"old-id",
+		"-> better-node-text",
+		"other-old-id",
+		"-> other-better-node-text",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("missing %q:\n%s", want, view)
+		}
+	}
+	if !g.HasNode("old-id") {
+		t.Fatal("check view mutated graph")
+	}
+}
+
+func TestCheckViewScrollsWithinTerminalHeight(t *testing.T) {
+	g := graph.New()
+	for i := 1; i <= 12; i++ {
+		id := graph.NodeID(fmt.Sprintf("old-%02d", i))
+		text := fmt.Sprintf("Better node text %02d", i)
+		must(t, g.AddNodeWithID(id, text))
+	}
+	m := newTestModel(t, g)
+	m.mode = modeCheck
+	m.height = 10
+	m.width = 50
+
+	view := m.View()
+	if !strings.Contains(view, "Check") {
+		t.Fatalf("initial check view lost title:\n%s", view)
+	}
+	if !strings.Contains(view, "PgUp/PgDn") {
+		t.Fatalf("overflowing check view should show scroll controls:\n%s", view)
+	}
+	if lines := strings.Count(view, "\n") + 1; lines > m.height {
+		t.Fatalf("view has %d lines, height %d:\n%s", lines, m.height, view)
+	}
+
+	var next tea.Model = m
+	for i := 0; i < 6; i++ {
+		next, _ = next.Update(runeKey('j'))
+	}
+	scrolled := next.(Model)
+	if scrolled.checkScroll == 0 {
+		t.Fatal("expected check view to scroll")
+	}
+	view = scrolled.View()
+	if lines := strings.Count(view, "\n") + 1; lines > scrolled.height {
+		t.Fatalf("scrolled view has %d lines, height %d:\n%s", lines, scrolled.height, view)
 	}
 }
 
@@ -352,6 +417,26 @@ func TestNodeReorderDoesNothingWithoutVisibleRelation(t *testing.T) {
 	}
 	if updated.dirty {
 		t.Fatal("invisible no-op reorder should not dirty the graph")
+	}
+}
+
+func TestCommandGridReflowsToFitWidth(t *testing.T) {
+	rows := [][]string{
+		{"a add node", "p add parent", "c add child", "x unlink selected"},
+		{"i inspect", "e edit", "d delete node", "/ search"},
+		{"r ready", "l leaves", "o order", "C check"},
+		{"Space done/undone", "v completed", "R reset", "W rewrite"},
+		{"J/K reorder", "q quit", "? help"},
+	}
+
+	view := renderCommandGrid(rows, 36)
+	for _, line := range strings.Split(view, "\n") {
+		if got := lipgloss.Width(line); got > 36 {
+			t.Fatalf("line width = %d, want <= 36:\n%s", got, view)
+		}
+	}
+	if !strings.Contains(view, "x unlink selected") {
+		t.Fatalf("expected full command label:\n%s", view)
 	}
 }
 
@@ -789,6 +874,39 @@ func TestSearchDoesNotMatchHiddenIDAfterEdit(t *testing.T) {
 
 	if results := m.searchResults("Curt"); len(results) != 0 {
 		t.Fatalf("results = %v", results)
+	}
+}
+
+func TestSearchWindowsResultsToTerminalHeight(t *testing.T) {
+	g := graph.New()
+	for i := 1; i <= 25; i++ {
+		id := graph.NodeID(fmt.Sprintf("candidate-%02d", i))
+		text := fmt.Sprintf("Candidate %02d with enough extra text to stay compact in search", i)
+		must(t, g.AddNodeWithID(id, text))
+	}
+	m := newTestModel(t, g)
+	m.mode = modeSearch
+	m.height = 16
+	m.width = 48
+
+	view := m.viewSearch()
+	if !strings.Contains(view, "Search 1-10 of 25") {
+		t.Fatalf("expected initial search window:\n%s", view)
+	}
+	if strings.Contains(view, "Candidate 11") {
+		t.Fatalf("rendered beyond visible search window:\n%s", view)
+	}
+	if lines := strings.Count(view, "\n") + 1; lines > m.height {
+		t.Fatalf("view has %d lines, height %d:\n%s", lines, m.height, view)
+	}
+
+	m.searchCursor = 14
+	view = m.viewSearch()
+	if !strings.Contains(view, "Search 10-19 of 25") {
+		t.Fatalf("expected centered search window:\n%s", view)
+	}
+	if !strings.Contains(view, "Candidate 15") {
+		t.Fatalf("selected search candidate not visible:\n%s", view)
 	}
 }
 

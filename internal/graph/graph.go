@@ -246,6 +246,10 @@ func (g *Graph) RekeyByText() (map[NodeID]NodeID, error) {
 	return mapping, nil
 }
 
+func (g *Graph) RekeyPreview() (map[NodeID]NodeID, error) {
+	return g.Clone().RekeyByText()
+}
+
 func (g *Graph) DeleteNode(id NodeID) error {
 	id = cleanID(id)
 	if !g.HasNode(id) {

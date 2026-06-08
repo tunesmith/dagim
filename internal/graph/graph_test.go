@@ -103,6 +103,32 @@ func TestRekeyByTextRegeneratesIDsAndPreservesEdges(t *testing.T) {
 	}
 }
 
+func TestRekeyPreviewDoesNotMutateGraph(t *testing.T) {
+	g := mustGraph(t,
+		"old-id", "Better node text",
+		"child", "Child",
+	)
+	mustAddEdge(t, g, "old-id", "child")
+
+	mapping, err := g.RekeyPreview()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mapping["old-id"] != "better-node-text" {
+		t.Fatalf("mapping = %#v", mapping)
+	}
+	if !g.HasNode("old-id") {
+		t.Fatal("preview mutated original node ID")
+	}
+	parents, err := g.ParentsOf("child")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(parents, []NodeID{"old-id"}) {
+		t.Fatalf("parents = %#v", parents)
+	}
+}
+
 func TestDeleteConnectedNodeRemovesIncidentEdges(t *testing.T) {
 	g := mustGraph(t, "a", "A", "b", "B", "c", "C")
 	mustAddEdge(t, g, "a", "b")

@@ -9,7 +9,10 @@ import (
 	"dagim/internal/graph"
 )
 
-const maxContentWidth = 112
+const (
+	maxContentWidth = 112
+	checkFooter     = "j/k scroll    PgUp/PgDn page    Home/End    Esc back"
+)
 
 var (
 	titleStyle    = lipgloss.NewStyle().Bold(true)
@@ -134,7 +137,7 @@ func (m Model) viewNode() string {
 	b.WriteByte('\n')
 	b.WriteString(m.rule())
 	b.WriteByte('\n')
-	b.WriteString(renderCommandGrid([][]string{
+	b.WriteString(m.renderCommandGrid([][]string{
 		{"a add node", "p add parent", "c add child", "x unlink selected"},
 		{"i inspect", "e edit", "d delete node", "/ search"},
 		{"r ready", "l leaves", "o order", "C check"},
@@ -190,8 +193,13 @@ func (m Model) viewPrompt() string {
 
 func (m Model) viewSearch() string {
 	results := m.searchResults(m.input.Value())
+	start, end := m.searchResultWindow(len(results))
+	title := "Search"
+	if len(results) > end-start {
+		title = fmt.Sprintf("Search %d-%d of %d", start+1, end, len(results))
+	}
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Search"))
+	b.WriteString(titleStyle.Render(title))
 	b.WriteByte('\n')
 	b.WriteString(m.rule())
 	b.WriteByte('\n')
@@ -200,9 +208,10 @@ func (m Model) viewSearch() string {
 	if len(results) == 0 {
 		b.WriteString(mutedStyle.Render("  no matches"))
 	} else {
-		for i, id := range results {
+		for i := start; i < end; i++ {
+			id := results[i]
 			node, _ := m.g.Node(id)
-			b.WriteString(m.renderSelectableNode(i == m.searchCursor, node))
+			b.WriteString(m.renderSelectableLine(i == m.searchCursor, node.Text))
 			b.WriteByte('\n')
 		}
 	}
@@ -252,7 +261,7 @@ func (m Model) viewReady() string {
 		}
 	}
 	b.WriteString("\n")
-	b.WriteString(renderCommandGrid([][]string{
+	b.WriteString(m.renderCommandGrid([][]string{
 		{"a add node", "Enter focus", "Space done/undone", "/ search"},
 		{"i inspect", "v completed", "o order", "l leaves"},
 		{"R reset", "W rewrite", "J/K reorder", "C check"},
@@ -278,7 +287,7 @@ func (m Model) viewLeaves() string {
 		}
 	}
 	b.WriteString("\n")
-	b.WriteString(renderCommandGrid([][]string{
+	b.WriteString(m.renderCommandGrid([][]string{
 		{"Enter focus", "Space done/undone", "i inspect", "/ search"},
 		{"r ready", "v completed", "o order", "J/K reorder"},
 		{"R reset", "W rewrite", "C check", "q quit"},
@@ -332,7 +341,7 @@ func (m Model) viewOrder() string {
 		}
 	}
 	b.WriteByte('\n')
-	b.WriteString(renderCommandGrid([][]string{
+	b.WriteString(m.renderCommandGrid([][]string{
 		{"Space pick", "Enter inspect", "u undo", "r reset"},
 		{"e export", "C check", "Esc/q exit"},
 	}))
@@ -340,8 +349,19 @@ func (m Model) viewOrder() string {
 }
 
 func (m Model) viewCheck() string {
+	body := m.checkBody()
+	footer := "Esc back"
+	if m.scrollMax(body, checkFooter) > 0 {
+		footer = checkFooter
+	}
+	return m.renderScrollable(body, m.checkScroll, footer)
+}
+
+func (m Model) checkBody() string {
 	stats := m.g.Stats()
 	transitive := m.g.TransitiveEdges()
+	rekeyMapping, rekeyChanged, rekeyErr := m.rekeyChanges()
+	rekeyChanges := rekeyChangesInOrder(m.g.Order(), rekeyMapping)
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Check"))
 	b.WriteByte('\n')
@@ -353,10 +373,10 @@ func (m Model) viewCheck() string {
 		b.WriteString("valid: yes")
 	}
 	b.WriteByte('\n')
-	if m.dirty {
-		b.WriteString("unsaved changes: yes")
+	if rekeyErr != nil {
+		b.WriteString(errorStyle.Render("rewrite check failed: " + rekeyErr.Error()))
 	} else {
-		b.WriteString("unsaved changes: no")
+		b.WriteString(fmt.Sprintf("W rewrite ID changes: %d", rekeyChanged))
 	}
 	b.WriteString("\n\n")
 	b.WriteString(fmt.Sprintf("nodes: %d\n", stats.Nodes))
@@ -366,6 +386,19 @@ func (m Model) viewCheck() string {
 	b.WriteString(fmt.Sprintf("roots: %d\n", stats.Roots))
 	b.WriteString(fmt.Sprintf("leaves: %d\n", stats.Leaves))
 	b.WriteString(fmt.Sprintf("transitive edges: %d\n", len(transitive)))
+	if len(rekeyChanges) > 0 {
+		b.WriteByte('\n')
+		b.WriteString(titleStyle.Render("W rewrite ID changes"))
+		b.WriteByte('\n')
+		b.WriteString(m.rule())
+		b.WriteByte('\n')
+		for _, change := range rekeyChanges {
+			b.WriteString(m.renderWrapped("  ", string(change.oldID), mutedStyle))
+			b.WriteByte('\n')
+			b.WriteString(m.renderWrappedWithContinuation("    -> ", string(change.newID), mutedStyle, 7))
+			b.WriteByte('\n')
+		}
+	}
 	b.WriteByte('\n')
 	b.WriteString(titleStyle.Render("Transitive edges"))
 	b.WriteByte('\n')
@@ -374,17 +407,18 @@ func (m Model) viewCheck() string {
 	if len(transitive) == 0 {
 		b.WriteString(mutedStyle.Render("  none"))
 	} else {
-		for _, edge := range transitive {
+		for i, edge := range transitive {
 			parent, _ := m.g.Node(edge.Parent)
 			child, _ := m.g.Node(edge.Child)
-			b.WriteString(m.renderWrapped("", fmt.Sprintf("%s -> %s", parent.Text, child.Text), lipgloss.NewStyle()))
+			b.WriteString(m.renderWrapped(fmt.Sprintf("%d. ", i+1), parent.Text, lipgloss.NewStyle()))
 			b.WriteByte('\n')
-			b.WriteString(mutedStyle.Render("  via " + formatNodePath(edge.Path)))
+			b.WriteString(m.renderWrappedWithContinuation("   -> ", child.Text, lipgloss.NewStyle(), 6))
+			b.WriteByte('\n')
+			b.WriteString(mutedStyle.Render(fmt.Sprintf("   via alternate path (%d edges)", len(edge.Path)-1)))
 			b.WriteByte('\n')
 		}
 	}
 	b.WriteString("\n")
-	b.WriteString(commandStyle.Render("Esc back"))
 	return b.String()
 }
 
@@ -478,40 +512,100 @@ func (m Model) viewHelp() string {
 	}, "\n")
 }
 
-func formatNodePath(path []graph.NodeID) string {
-	parts := make([]string, 0, len(path))
-	for _, id := range path {
-		parts = append(parts, string(id))
-	}
-	return strings.Join(parts, " -> ")
+type rekeyChange struct {
+	oldID graph.NodeID
+	newID graph.NodeID
 }
 
-func renderCommandGrid(rows [][]string) string {
-	maxWidth := 0
-	for _, row := range rows {
-		for _, cell := range row {
-			if len(cell) > maxWidth {
-				maxWidth = len(cell)
-			}
+func rekeyChangesInOrder(order []graph.NodeID, mapping map[graph.NodeID]graph.NodeID) []rekeyChange {
+	changes := make([]rekeyChange, 0)
+	for _, oldID := range order {
+		newID, ok := mapping[oldID]
+		if ok && oldID != newID {
+			changes = append(changes, rekeyChange{oldID: oldID, newID: newID})
 		}
 	}
-	cellWidth := maxWidth + 4
+	return changes
+}
+
+func (m Model) renderCommandGrid(rows [][]string) string {
+	return renderCommandGrid(rows, m.contentWidth())
+}
+
+func renderCommandGrid(rows [][]string, width int) string {
+	const gap = 4
+	var cells []string
+	maxColumns := 0
+	for _, row := range rows {
+		if len(row) > maxColumns {
+			maxColumns = len(row)
+		}
+		cells = append(cells, row...)
+	}
+	if len(cells) == 0 {
+		return ""
+	}
+	if width <= 0 {
+		width = 80
+	}
+	columns := commandGridColumns(cells, maxColumns, width, gap)
+	widths := commandGridColumnWidths(cells, columns)
+	if columns == 1 && widths[0] > width {
+		widths[0] = width
+	}
 	var b strings.Builder
-	for rowIndex, row := range rows {
+	for start := 0; start < len(cells); start += columns {
 		var line strings.Builder
-		for i, cell := range row {
-			if i == len(row)-1 {
-				line.WriteString(cell)
-				continue
+		end := start + columns
+		if end > len(cells) {
+			end = len(cells)
+		}
+		for i := start; i < end; i++ {
+			column := i - start
+			if column > 0 {
+				line.WriteString(strings.Repeat(" ", gap))
 			}
-			line.WriteString(fmt.Sprintf("%-*s", cellWidth, cell))
+			cell := truncateText(cells[i], widths[column])
+			if i < end-1 {
+				line.WriteString(fmt.Sprintf("%-*s", widths[column], cell))
+			} else {
+				line.WriteString(cell)
+			}
 		}
 		b.WriteString(commandStyle.Render(strings.TrimRight(line.String(), " ")))
-		if rowIndex < len(rows)-1 {
+		if end < len(cells) {
 			b.WriteByte('\n')
 		}
 	}
 	return b.String()
+}
+
+func commandGridColumns(cells []string, maxColumns, width, gap int) int {
+	if maxColumns < 1 {
+		maxColumns = 1
+	}
+	for columns := maxColumns; columns > 1; columns-- {
+		widths := commandGridColumnWidths(cells, columns)
+		total := gap * (columns - 1)
+		for _, w := range widths {
+			total += w
+		}
+		if total <= width {
+			return columns
+		}
+	}
+	return 1
+}
+
+func commandGridColumnWidths(cells []string, columns int) []int {
+	widths := make([]int, columns)
+	for i, cell := range cells {
+		column := i % columns
+		if len(cell) > widths[column] {
+			widths[column] = len(cell)
+		}
+	}
+	return widths
 }
 
 func (m Model) renderSelectable(selected bool, text string) string {
@@ -619,6 +713,84 @@ func (m Model) padBlock(text string) string {
 		lines[i] = pad + lines[i]
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (m Model) renderScrollable(body string, offset int, footer string) string {
+	if m.height <= 0 {
+		return body + "\n\n" + commandStyle.Render("Esc back")
+	}
+	lines := strings.Split(body, "\n")
+	bodyHeight := m.scrollBodyHeight(footer)
+	maxScroll := scrollMaxForLines(lines, bodyHeight)
+	offset = clampInt(offset, 0, maxScroll)
+	end := offset + bodyHeight
+	if end > len(lines) {
+		end = len(lines)
+	}
+
+	var b strings.Builder
+	for i := offset; i < end; i++ {
+		if i > offset {
+			b.WriteByte('\n')
+		}
+		b.WriteString(lines[i])
+	}
+	if footer != "" && m.height > bodyHeight {
+		b.WriteByte('\n')
+		b.WriteString(commandStyle.Render(footer))
+	}
+	return b.String()
+}
+
+func (m Model) checkScrollMax() int {
+	return m.scrollMax(m.checkBody(), checkFooter)
+}
+
+func (m Model) checkScrollPageSize() int {
+	size := m.scrollBodyHeight(checkFooter) - 1
+	if size < 1 {
+		return 1
+	}
+	return size
+}
+
+func (m Model) scrollMax(body, footer string) int {
+	if m.height <= 0 {
+		return 0
+	}
+	return scrollMaxForLines(strings.Split(body, "\n"), m.scrollBodyHeight(footer))
+}
+
+func (m Model) scrollBodyHeight(footer string) int {
+	if m.height <= 0 {
+		return 0
+	}
+	bodyHeight := m.height
+	if footer != "" {
+		bodyHeight--
+	}
+	if bodyHeight < 1 {
+		bodyHeight = 1
+	}
+	return bodyHeight
+}
+
+func scrollMaxForLines(lines []string, bodyHeight int) int {
+	maxScroll := len(lines) - bodyHeight
+	if maxScroll < 0 {
+		return 0
+	}
+	return maxScroll
+}
+
+func clampInt(value, min, max int) int {
+	if value < min {
+		return min
+	}
+	if value > max {
+		return max
+	}
+	return value
 }
 
 func leftMarginForTerminal(width int) int {

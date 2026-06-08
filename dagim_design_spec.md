@@ -543,7 +543,7 @@ Wrapped rows in selectable node lists should use a hanging indent on continuatio
 
 On wide terminals, the TUI should remain left-anchored with a modest gutter and a capped content width. Separators and wrapped text should not stretch across an entire large monitor.
 
-Command panels should render as aligned grids rather than hand-spaced prose rows.
+Command panels should render as aligned grids rather than hand-spaced prose rows. They should reflow to fewer columns on narrow terminals so command labels do not extend off-screen.
 
 ### 11.2 Suggested Keybindings
 
@@ -685,6 +685,7 @@ Version 1 search should support:
 2. Display matches in file order.
 3. Keyboard selection.
 4. Enter to focus.
+5. Height-bounded result windows so the search header, input, and footer remain visible on short terminals.
 
 Autocomplete prompts for parent/child linking should reuse the same search behavior.
 
@@ -1285,6 +1286,8 @@ The user can move a selected parent or child row earlier or later within its dis
 ### 25.15 Check Command
 
 `dagim --check FILE` validates the file without opening the TUI and prints useful graph stats, including ready, complete, roots, and leaves counts, on success. It also reports transitive edge warnings.
+
+The TUI check view should also indicate whether `W` rewrite would change node IDs and list the prospective ID changes. A valid graph may still have rewrite ID changes pending because validity is about graph invariants, not whether current stable IDs match generated slugs from current text. Transitive edge diagnostics should stay compact and wrap to the terminal width rather than dumping long paths across the screen. If the diagnostics exceed the terminal height, Check should provide in-app scrolling and keep its footer visible.
 
 ### 25.16 Rewrite Command
 
