@@ -121,6 +121,56 @@ func TestInspectReturnsToPreviousMode(t *testing.T) {
 	}
 }
 
+func TestCheckViewReportsStatsAndTransitiveEdges(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("a", "A"))
+	must(t, g.AddNodeWithID("b", "B"))
+	must(t, g.AddNodeWithID("c", "C"))
+	must(t, g.AddNodeWithID("d", "D"))
+	must(t, g.AddEdge("a", "b"))
+	must(t, g.AddEdge("b", "c"))
+	must(t, g.AddEdge("c", "d"))
+	must(t, g.AddEdge("a", "d"))
+	m := New("test.dagim", g)
+	m.mode = modeCheck
+
+	view := m.View()
+	for _, want := range []string{
+		"Check",
+		"valid: yes",
+		"nodes: 4",
+		"edges: 4",
+		"transitive edges: 1",
+		"A -> D",
+		"via a -> b -> c -> d",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("missing %q:\n%s", want, view)
+		}
+	}
+}
+
+func TestReadyCanOpenCheckView(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	m := New("test.dagim", g)
+
+	next, _ := m.Update(runeKey('C'))
+	checking := next.(Model)
+	if checking.mode != modeCheck {
+		t.Fatalf("mode = %v", checking.mode)
+	}
+	if checking.previous != modeReady {
+		t.Fatalf("previous = %v", checking.previous)
+	}
+
+	next, _ = checking.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated := next.(Model)
+	if updated.mode != modeReady {
+		t.Fatalf("mode = %v", updated.mode)
+	}
+}
+
 func TestCtrlCQuitsFromAnyMode(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))

@@ -38,6 +38,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateOrder(msg)
 		case modeInspect:
 			return m.updateInspect(msg)
+		case modeCheck:
+			return m.updateCheck(msg)
 		case modeConfirmDelete:
 			return m.updateConfirmDelete(msg)
 		case modeConfirmRewrite:
@@ -95,6 +97,9 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.inspectID = m.selectedNodeOrCurrent(items)
 		m.previous = modeNode
 		m.mode = modeInspect
+	case "C":
+		m.previous = modeNode
+		m.mode = modeCheck
 	case "a":
 		return m.setPrompt(promptAddNode, "Add node", "")
 	case "p":
@@ -345,6 +350,9 @@ func (m Model) updateReady(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.previous = modeReady
 			m.mode = modeInspect
 		}
+	case "C":
+		m.previous = modeReady
+		m.mode = modeCheck
 	case "/":
 		return m.setSearch()
 	case "l":
@@ -428,6 +436,9 @@ func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.previous = modeLeaves
 			m.mode = modeInspect
 		}
+	case "C":
+		m.previous = modeLeaves
+		m.mode = modeCheck
 	case "/":
 		return m.setSearch()
 	case "r":
@@ -505,6 +516,9 @@ func (m Model) updateOrder(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.previous = modeOrder
 			m.mode = modeInspect
 		}
+	case "C":
+		m.previous = modeOrder
+		m.mode = modeCheck
 	case "u":
 		if !m.order.Undo() {
 			m.message = "nothing to undo"
@@ -521,6 +535,14 @@ func (m Model) updateOrder(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) updateInspect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc", "enter":
+		m.mode = m.previous
+	}
+	return m, nil
+}
+
+func (m Model) updateCheck(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "enter", "q":
 		m.mode = m.previous
 	}
 	return m, nil

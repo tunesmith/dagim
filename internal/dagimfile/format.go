@@ -36,10 +36,11 @@ func (e ParseError) Unwrap() error {
 }
 
 type CheckResult struct {
-	Graph       *graph.Graph
-	Stats       graph.Stats
-	Canonical   string
-	IsCanonical bool
+	Graph           *graph.Graph
+	Stats           graph.Stats
+	TransitiveEdges []graph.TransitiveEdge
+	Canonical       string
+	IsCanonical     bool
 }
 
 func Parse(input string) (*graph.Graph, error) {
@@ -168,10 +169,11 @@ func Check(input string) (*CheckResult, error) {
 	}
 	canonical := Serialize(g)
 	return &CheckResult{
-		Graph:       g,
-		Stats:       g.Stats(),
-		Canonical:   canonical,
-		IsCanonical: input == canonical,
+		Graph:           g,
+		Stats:           g.Stats(),
+		TransitiveEdges: g.TransitiveEdges(),
+		Canonical:       canonical,
+		IsCanonical:     input == canonical,
 	}, nil
 }
 

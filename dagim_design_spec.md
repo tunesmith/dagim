@@ -458,7 +458,8 @@ Do not implement optional later options unless the version 1 implementation is a
 2. Validate node IDs, parent references, duplicate edges, and cycles.
 3. Print useful graph stats on success, such as node count, edge count, root count, and leaf count.
 4. Report whether the file differs from canonical formatting, without modifying it.
-5. Exit nonzero on parse, validation, or canonical-format errors if a strict/check mode is later added; v1 may exit zero for valid but noncanonical files if it clearly reports the formatting status.
+5. Report transitive edges as warnings/suggestions.
+6. Exit nonzero on parse, validation, or canonical-format errors if a strict/check mode is later added; v1 may exit zero for valid but noncanonical files if it clearly reports the formatting status.
 
 Normal TUI save should preserve existing node IDs. Rekeying is an explicit migration/refactor operation because node IDs are stable identity.
 
@@ -513,7 +514,7 @@ a add node    p add parent    c add child    x unlink
 i inspect     e edit          d delete       / search
 r ready       l leaves        o order       s save
 Space done/undone  v completed  R reset  W rewrite
-J/K reorder   q quit          ? help
+J/K reorder   C check         q quit      ? help
 ```
 
 ### 11.1 Node View Behavior
@@ -534,6 +535,7 @@ The user should be able to:
 12. View ready nodes and leaves.
 13. Mark nodes complete or incomplete.
 14. Show or hide completed nodes.
+15. Open a check/diagnostics view.
 
 Normal node, ready, leaves, search, and order lists should show node text without inline IDs. Long node text should wrap to the terminal width. Node IDs should be available through inspect views, not through the main scanning surfaces.
 
@@ -566,6 +568,7 @@ Space         mark selected/current node complete or incomplete
 v             show/hide completed nodes
 J / K         reorder selected visible row
 o             order remaining incomplete nodes
+C             show check/diagnostics view
 s             write/save file
 R             reset all completion state, with confirmation
 W             rewrite file: regenerate IDs, update references, save canonical format
@@ -943,6 +946,21 @@ To add:
 A -> B
 ```
 
+## 18.5 Transitive Edge Warnings
+
+A direct edge is transitive when the child is still reachable from the parent through another path after ignoring that direct edge.
+
+Example:
+
+```text
+A -> D
+A -> B -> C -> D
+```
+
+In this case, `A -> D` is redundant under dagim's minimal edge meaning because `A` already must come before `D` through `B` and `C`.
+
+Version 1 should report transitive edges from `dagim --check FILE` and the TUI check view. It should not remove them automatically during rewrite. Removing transitive edges is a graph-changing simplification, not formatting.
+
 Reject if:
 
 ```text
@@ -1266,7 +1284,7 @@ The user can move a selected parent or child row earlier or later within its dis
 
 ### 25.15 Check Command
 
-`dagim --check FILE` validates the file without opening the TUI and prints useful graph stats, including ready, complete, roots, and leaves counts, on success.
+`dagim --check FILE` validates the file without opening the TUI and prints useful graph stats, including ready, complete, roots, and leaves counts, on success. It also reports transitive edge warnings.
 
 ### 25.16 Rewrite Command
 

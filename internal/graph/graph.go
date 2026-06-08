@@ -30,6 +30,17 @@ type Stats struct {
 	Leaves   int
 }
 
+type Edge struct {
+	Parent NodeID
+	Child  NodeID
+}
+
+type TransitiveEdge struct {
+	Parent NodeID
+	Child  NodeID
+	Path   []NodeID
+}
+
 var (
 	ErrEmptyNodeID   = errors.New("empty node id")
 	ErrEmptyNodeText = errors.New("empty node text")
@@ -312,6 +323,17 @@ func (g *Graph) ChildrenOf(id NodeID) ([]NodeID, error) {
 	return g.sortedIDs(children), nil
 }
 
+func (g *Graph) Edges() []Edge {
+	edges := make([]Edge, 0)
+	for _, child := range g.order {
+		parents, _ := g.ParentsOf(child)
+		for _, parent := range parents {
+			edges = append(edges, Edge{Parent: parent, Child: child})
+		}
+	}
+	return edges
+}
+
 func (g *Graph) Roots() []NodeID {
 	roots := make([]NodeID, 0)
 	for _, id := range g.order {
@@ -460,7 +482,26 @@ func (g *Graph) Validate() error {
 	return nil
 }
 
+func (g *Graph) TransitiveEdges() []TransitiveEdge {
+	edges := make([]TransitiveEdge, 0)
+	for _, edge := range g.Edges() {
+		path, found := g.pathSkipping(edge.Parent, edge.Child, edge)
+		if found {
+			edges = append(edges, TransitiveEdge{
+				Parent: edge.Parent,
+				Child:  edge.Child,
+				Path:   path,
+			})
+		}
+	}
+	return edges
+}
+
 func (g *Graph) Path(from, to NodeID) ([]NodeID, bool) {
+	return g.pathSkipping(from, to, Edge{})
+}
+
+func (g *Graph) pathSkipping(from, to NodeID, skip Edge) ([]NodeID, bool) {
 	from, to = cleanID(from), cleanID(to)
 	if !g.HasNode(from) || !g.HasNode(to) {
 		return nil, false
@@ -477,6 +518,9 @@ func (g *Graph) Path(from, to NodeID) ([]NodeID, bool) {
 		visited[current] = true
 		children, _ := g.ChildrenOf(current)
 		for _, child := range children {
+			if current == skip.Parent && child == skip.Child {
+				continue
+			}
 			if foundPath, ok := walk(child, append(path, current)); ok {
 				return foundPath, true
 			}

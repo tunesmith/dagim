@@ -38,6 +38,8 @@ func (m Model) View() string {
 		body = m.viewOrder()
 	case modeInspect:
 		body = m.viewInspect()
+	case modeCheck:
+		body = m.viewCheck()
 	case modeConfirmDelete:
 		body = m.viewConfirmDelete()
 	case modeConfirmRewrite:
@@ -137,7 +139,7 @@ func (m Model) viewNode() string {
 		{"i inspect", "e edit", "d delete", "/ search"},
 		{"r ready", "l leaves", "o order", "s save"},
 		{"Space done/undone", "v completed", "R reset", "W rewrite"},
-		{"J/K reorder", "q quit", "? help"},
+		{"J/K reorder", "C check", "q quit", "? help"},
 	}))
 	return b.String()
 }
@@ -254,7 +256,7 @@ func (m Model) viewReady() string {
 		{"a add node", "Enter focus", "Space done/undone", "/ search"},
 		{"i inspect", "v completed", "o order", "l leaves"},
 		{"R reset", "W rewrite", "J/K reorder", "s save"},
-		{"q quit", "? help"},
+		{"C check", "q quit", "? help"},
 	}))
 	return b.String()
 }
@@ -280,7 +282,7 @@ func (m Model) viewLeaves() string {
 		{"Enter focus", "Space done/undone", "i inspect", "/ search"},
 		{"r ready", "v completed", "o order", "J/K reorder"},
 		{"R reset", "W rewrite", "s save", "q quit"},
-		{"Esc back", "? help"},
+		{"Esc back", "C check", "? help"},
 	}))
 	return b.String()
 }
@@ -332,8 +334,57 @@ func (m Model) viewOrder() string {
 	b.WriteByte('\n')
 	b.WriteString(renderCommandGrid([][]string{
 		{"Space pick", "Enter inspect", "u undo", "r reset"},
-		{"e export", "Esc/q exit"},
+		{"e export", "C check", "Esc/q exit"},
 	}))
+	return b.String()
+}
+
+func (m Model) viewCheck() string {
+	stats := m.g.Stats()
+	transitive := m.g.TransitiveEdges()
+	var b strings.Builder
+	b.WriteString(titleStyle.Render("Check"))
+	b.WriteByte('\n')
+	b.WriteString(m.rule())
+	b.WriteByte('\n')
+	if err := m.g.Validate(); err != nil {
+		b.WriteString(errorStyle.Render("invalid: " + err.Error()))
+	} else {
+		b.WriteString("valid: yes")
+	}
+	b.WriteByte('\n')
+	if m.dirty {
+		b.WriteString("unsaved changes: yes")
+	} else {
+		b.WriteString("unsaved changes: no")
+	}
+	b.WriteString("\n\n")
+	b.WriteString(fmt.Sprintf("nodes: %d\n", stats.Nodes))
+	b.WriteString(fmt.Sprintf("edges: %d\n", stats.Edges))
+	b.WriteString(fmt.Sprintf("complete: %d\n", stats.Complete))
+	b.WriteString(fmt.Sprintf("ready: %d\n", stats.Ready))
+	b.WriteString(fmt.Sprintf("roots: %d\n", stats.Roots))
+	b.WriteString(fmt.Sprintf("leaves: %d\n", stats.Leaves))
+	b.WriteString(fmt.Sprintf("transitive edges: %d\n", len(transitive)))
+	b.WriteByte('\n')
+	b.WriteString(titleStyle.Render("Transitive edges"))
+	b.WriteByte('\n')
+	b.WriteString(m.rule())
+	b.WriteByte('\n')
+	if len(transitive) == 0 {
+		b.WriteString(mutedStyle.Render("  none"))
+	} else {
+		for _, edge := range transitive {
+			parent, _ := m.g.Node(edge.Parent)
+			child, _ := m.g.Node(edge.Child)
+			b.WriteString(m.renderWrapped("", fmt.Sprintf("%s -> %s", parent.Text, child.Text), lipgloss.NewStyle()))
+			b.WriteByte('\n')
+			b.WriteString(mutedStyle.Render("  via " + formatNodePath(edge.Path)))
+			b.WriteByte('\n')
+		}
+	}
+	b.WriteString("\n")
+	b.WriteString(commandStyle.Render("Esc back"))
 	return b.String()
 }
 
@@ -414,7 +465,8 @@ func (m Model) viewHelp() string {
 		"d delete          / search             r ready",
 		"l leaves          o order remaining    J/K reorder",
 		"Space done/undone v completed          s save",
-		"R reset done      W rewrite file       q quit",
+		"R reset done      W rewrite file       C check",
+		"q quit",
 		"ctrl+c force quit ctrl+z suspend",
 		"",
 		"In parent/child prompts, Enter links the selected match and Ctrl+N creates the typed text.",
@@ -422,6 +474,14 @@ func (m Model) viewHelp() string {
 		"",
 		commandStyle.Render("Esc back"),
 	}, "\n")
+}
+
+func formatNodePath(path []graph.NodeID) string {
+	parts := make([]string, 0, len(path))
+	for _, id := range path {
+		parts = append(parts, string(id))
+	}
+	return strings.Join(parts, " -> ")
 }
 
 func renderCommandGrid(rows [][]string) string {

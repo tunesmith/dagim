@@ -5,8 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"dagim/internal/dagimfile"
+	"dagim/internal/graph"
 	"dagim/internal/ui"
 )
 
@@ -76,5 +78,17 @@ func runCheck(path string) error {
 	} else {
 		fmt.Println("canonical: no")
 	}
+	fmt.Printf("transitive_edges: %d\n", len(result.TransitiveEdges))
+	for _, edge := range result.TransitiveEdges {
+		fmt.Printf("transitive: %s -> %s via %s\n", edge.Parent, edge.Child, formatPath(edge.Path))
+	}
 	return nil
+}
+
+func formatPath(path []graph.NodeID) string {
+	parts := make([]string, 0, len(path))
+	for _, id := range path {
+		parts = append(parts, string(id))
+	}
+	return strings.Join(parts, " -> ")
 }

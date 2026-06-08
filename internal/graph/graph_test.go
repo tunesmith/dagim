@@ -296,6 +296,25 @@ func TestValidateRejectsBlockedCompletionState(t *testing.T) {
 	}
 }
 
+func TestTransitiveEdgesReportsDirectEdgesWithAlternatePaths(t *testing.T) {
+	g := mustGraph(t, "a", "A", "b", "B", "c", "C", "d", "D", "x", "X")
+	mustAddEdge(t, g, "a", "b")
+	mustAddEdge(t, g, "b", "c")
+	mustAddEdge(t, g, "c", "d")
+	mustAddEdge(t, g, "a", "d")
+	mustAddEdge(t, g, "x", "d")
+
+	got := g.TransitiveEdges()
+	want := []TransitiveEdge{{
+		Parent: "a",
+		Child:  "d",
+		Path:   []NodeID{"a", "b", "c", "d"},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("transitive edges = %#v", got)
+	}
+}
+
 func TestOrderStartsFromCompletionState(t *testing.T) {
 	g := mustGraph(t, "a", "A", "b", "B", "c", "C")
 	mustAddEdge(t, g, "a", "c")

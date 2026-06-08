@@ -165,6 +165,33 @@ func TestCheckReportsCanonicalFormatting(t *testing.T) {
 	}
 }
 
+func TestCheckReportsTransitiveEdges(t *testing.T) {
+	result, err := Check(`# dagim v1
+
+node a: A
+
+node b: B
+  parent a
+
+node c: C
+  parent b
+
+node d: D
+  parent a
+  parent c
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.TransitiveEdges) != 1 {
+		t.Fatalf("transitive edges = %#v", result.TransitiveEdges)
+	}
+	edge := result.TransitiveEdges[0]
+	if edge.Parent != "a" || edge.Child != "d" || !reflect.DeepEqual(edge.Path, []graph.NodeID{"a", "b", "c", "d"}) {
+		t.Fatalf("edge = %#v", edge)
+	}
+}
+
 func TestRoundTrip(t *testing.T) {
 	input := `# dagim v1
 

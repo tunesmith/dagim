@@ -24,6 +24,7 @@ const (
 	modeLeaves
 	modeOrder
 	modeInspect
+	modeCheck
 	modeConfirmDelete
 	modeConfirmRewrite
 	modeConfirmReset
