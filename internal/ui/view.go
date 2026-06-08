@@ -137,9 +137,9 @@ func (m Model) viewNode() string {
 	b.WriteString(renderCommandGrid([][]string{
 		{"a add node", "p add parent", "c add child", "x unlink selected"},
 		{"i inspect", "e edit", "d delete node", "/ search"},
-		{"r ready", "l leaves", "o order", "s save"},
+		{"r ready", "l leaves", "o order", "C check"},
 		{"Space done/undone", "v completed", "R reset", "W rewrite"},
-		{"J/K reorder", "C check", "q quit", "? help"},
+		{"J/K reorder", "q quit", "? help"},
 	}))
 	return b.String()
 }
@@ -255,8 +255,8 @@ func (m Model) viewReady() string {
 	b.WriteString(renderCommandGrid([][]string{
 		{"a add node", "Enter focus", "Space done/undone", "/ search"},
 		{"i inspect", "v completed", "o order", "l leaves"},
-		{"R reset", "W rewrite", "J/K reorder", "s save"},
-		{"C check", "q quit", "? help"},
+		{"R reset", "W rewrite", "J/K reorder", "C check"},
+		{"q quit", "? help"},
 	}))
 	return b.String()
 }
@@ -281,8 +281,8 @@ func (m Model) viewLeaves() string {
 	b.WriteString(renderCommandGrid([][]string{
 		{"Enter focus", "Space done/undone", "i inspect", "/ search"},
 		{"r ready", "v completed", "o order", "J/K reorder"},
-		{"R reset", "W rewrite", "s save", "q quit"},
-		{"Esc back", "C check", "? help"},
+		{"R reset", "W rewrite", "C check", "q quit"},
+		{"Esc back", "? help"},
 	}))
 	return b.String()
 }
@@ -438,7 +438,7 @@ func (m Model) viewConfirmReset() string {
 	return strings.Join([]string{
 		titleStyle.Render("Reset completion?"),
 		m.rule(),
-		"This removes every complete marker from the graph and saves nothing yet.",
+		"This removes every complete marker from the graph and autosaves.",
 		"",
 		commandStyle.Render("y reset    n cancel"),
 	}, "\n")
@@ -446,9 +446,11 @@ func (m Model) viewConfirmReset() string {
 
 func (m Model) viewConfirmQuit() string {
 	return strings.Join([]string{
-		titleStyle.Render("Unsaved changes."),
+		titleStyle.Render("Autosave failed."),
 		m.rule(),
-		commandStyle.Render("y save and quit    n quit without saving    c cancel"),
+		"Some changes are only in memory.",
+		"",
+		commandStyle.Render("y retry save and quit    n quit without saving    c cancel"),
 	}, "\n")
 }
 
@@ -464,7 +466,7 @@ func (m Model) viewHelp() string {
 		"x unlink selected i inspect            e edit",
 		"d delete node     / search             r ready",
 		"l leaves          o order remaining    J/K reorder",
-		"Space done/undone v completed          s save",
+		"Space done/undone v completed",
 		"R reset done      W rewrite file       C check",
 		"q quit",
 		"ctrl+c force quit ctrl+z suspend",

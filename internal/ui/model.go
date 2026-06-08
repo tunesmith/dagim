@@ -364,13 +364,12 @@ func (m Model) toggleComplete(id graph.NodeID) Model {
 			m.message = "already undone"
 			return m
 		}
-		m.dirty = true
 		if count == 1 {
 			m.message = "marked undone"
 		} else {
 			m.message = fmt.Sprintf("marked %d nodes undone", count)
 		}
-		return m
+		return m.markChanged()
 	}
 	if err := m.g.MarkComplete(id); err != nil {
 		var blocked graph.BlockedError
@@ -385,9 +384,8 @@ func (m Model) toggleComplete(id graph.NodeID) Model {
 		m.message = err.Error()
 		return m
 	}
-	m.dirty = true
 	m.message = "marked done"
-	return m
+	return m.markChanged()
 }
 
 func (m Model) resetCompletion() Model {
@@ -396,9 +394,8 @@ func (m Model) resetCompletion() Model {
 		m.message = "no completed nodes"
 		return m
 	}
-	m.dirty = true
 	m.message = fmt.Sprintf("reset %d completed nodes", count)
-	return m
+	return m.markChanged()
 }
 
 func (m Model) reorderSelected(items []relationItem, direction int) Model {
@@ -423,7 +420,7 @@ func (m Model) reorderSelected(items []relationItem, direction int) Model {
 	}
 	if m.g.MoveTo(selected.id, orderIndex) {
 		m.cursor = targetIndex
-		m.dirty = true
+		m = m.markChanged()
 	}
 	return m
 }
@@ -441,8 +438,8 @@ func (m Model) reorderListItem(ids []graph.NodeID, cursor, direction int) (Model
 		return m, cursor
 	}
 	if m.g.MoveTo(ids[cursor], orderIndex) {
-		m.dirty = true
 		cursor = target
+		m = m.markChanged()
 	}
 	return m, cursor
 }
@@ -464,17 +461,31 @@ func (m Model) reorderReadyItem(direction int) Model {
 	return next
 }
 
-func (m Model) save() Model {
+func (m Model) markChanged() Model {
+	m.dirty = true
+	return m.autosave()
+}
+
+func (m Model) autosave() Model {
 	if err := m.g.Validate(); err != nil {
 		m.message = err.Error()
+		m.dirty = true
 		return m
 	}
 	if err := dagimfile.SaveAtomic(m.path, m.g); err != nil {
-		m.message = err.Error()
+		m.message = "autosave failed: " + err.Error()
+		m.dirty = true
 		return m
 	}
 	m.dirty = false
-	m.message = "saved " + m.path
+	return m
+}
+
+func (m Model) save() Model {
+	m = m.autosave()
+	if !m.dirty {
+		m.message = "saved " + m.path
+	}
 	return m
 }
 
@@ -544,8 +555,7 @@ func (m Model) addLinkedNode(text string, asParent bool) Model {
 	}
 	if m.current == "" {
 		m.current = id
-		m.dirty = true
-		return m
+		return m.markChanged()
 	}
 	if asParent {
 		m, err = m.addEdge(id, m.current)
@@ -564,7 +574,6 @@ func (m Model) addEdge(parent, child graph.NodeID) (Model, error) {
 	if err := m.g.AddEdge(parent, child); err != nil {
 		return m, err
 	}
-	m.dirty = true
 	parentNode, parentOK := m.g.Node(parent)
 	childNode, childOK := m.g.Node(child)
 	if parentOK && childOK && childNode.Complete && !parentNode.Complete {
@@ -578,7 +587,7 @@ func (m Model) addEdge(parent, child graph.NodeID) (Model, error) {
 			m.message = fmt.Sprintf("linked; marked %d nodes undone", count)
 		}
 	}
-	return m, nil
+	return m.markChanged(), nil
 }
 
 func inputWidth(width int) int {

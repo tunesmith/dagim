@@ -113,13 +113,13 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				if err := m.g.RemoveEdge(item.id, m.current); err != nil {
 					m.message = err.Error()
 				} else {
-					m.dirty = true
+					m = m.markChanged()
 				}
 			} else {
 				if err := m.g.RemoveEdge(m.current, item.id); err != nil {
 					m.message = err.Error()
 				} else {
-					m.dirty = true
+					m = m.markChanged()
 				}
 			}
 			if m.cursor >= len(m.relationItems()) && m.cursor > 0 {
@@ -159,8 +159,6 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.orderReturn = modeNode
 		m.mode = modeOrder
 		m.cursor = 0
-	case "s":
-		m = m.save()
 	case "R":
 		m.previous = modeNode
 		m.mode = modeConfirmReset
@@ -230,16 +228,16 @@ func (m Model) submitPrompt(useSuggestion bool) (tea.Model, tea.Cmd) {
 		}
 		m.current = id
 		m.cursor = 0
-		m.dirty = true
 		if duplicateText {
 			m.message = "created separate node with duplicate text"
 		}
+		m = m.markChanged()
 	case promptEdit:
 		if err := m.g.EditNodeText(m.current, value); err != nil {
 			m.message = err.Error()
 			return m, nil
 		}
-		m.dirty = true
+		m = m.markChanged()
 	case promptAddParent, promptAddChild:
 		asParent := m.promptAction == promptAddParent
 		var id graph.NodeID
@@ -366,8 +364,6 @@ func (m Model) updateReady(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.orderReturn = modeReady
 		m.mode = modeOrder
 		m.cursor = 0
-	case "s":
-		m = m.save()
 	case "v":
 		m.showCompleted = !m.showCompleted
 		m.readyCursor = 0
@@ -450,8 +446,6 @@ func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.orderReturn = modeLeaves
 		m.mode = modeOrder
 		m.cursor = 0
-	case "s":
-		m = m.save()
 	case "v":
 		m.showCompleted = !m.showCompleted
 		m.leavesCursor = 0
@@ -619,17 +613,16 @@ func (m Model) deleteCurrent() Model {
 		m.message = err.Error()
 		return m
 	}
-	m.dirty = true
 	order = m.g.Order()
 	if len(order) == 0 {
 		m.current = ""
 		m.cursor = 0
-		return m
+		return m.markChanged()
 	}
 	if index >= len(order) {
 		index = len(order) - 1
 	}
 	m.current = order[index]
 	m.cursor = 0
-	return m
+	return m.markChanged()
 }

@@ -461,7 +461,7 @@ Do not implement optional later options unless the version 1 implementation is a
 5. Report transitive edges as warnings/suggestions.
 6. Exit nonzero on parse, validation, or canonical-format errors if a strict/check mode is later added; v1 may exit zero for valid but noncanonical files if it clearly reports the formatting status.
 
-Normal TUI save should preserve existing node IDs. Rekeying is an explicit migration/refactor operation because node IDs are stable identity.
+Normal TUI autosave should preserve existing node IDs. Rekeying is an explicit migration/refactor operation because node IDs are stable identity.
 
 ## 10. TUI Overview
 
@@ -510,11 +510,11 @@ Children
 
 Commands
 ────────────────────────────────────────
-a add node    p add parent    c add child    x unlink
-i inspect     e edit          d delete       / search
-r ready       l leaves        o order       s save
+a add node    p add parent    c add child    x unlink selected
+i inspect     e edit          d delete node  / search
+r ready       l leaves        o order        C check
 Space done/undone  v completed  R reset  W rewrite
-J/K reorder   C check         q quit      ? help
+J/K reorder   q quit          ? help
 ```
 
 ### 11.1 Node View Behavior
@@ -531,7 +531,7 @@ The user should be able to:
 8. Unlink an existing parent or child.
 9. Search all nodes by text.
 10. Inspect a node to see details such as its ID.
-11. Save.
+11. Autosave successful edits immediately.
 12. View ready nodes and leaves.
 13. Mark nodes complete or incomplete.
 14. Show or hide completed nodes.
@@ -569,11 +569,10 @@ v             show/hide completed nodes
 J / K         reorder selected visible row
 o             order remaining incomplete nodes
 C             show check/diagnostics view
-s             write/save file
 R             reset all completion state, with confirmation
 W             rewrite file: regenerate IDs, update references, save canonical format
 ?             help
-q             quit, prompting if unsaved changes exist
+q             quit, prompting only if autosave has failed and changes remain unsaved
 ctrl+c        force quit immediately
 ctrl+z        suspend to shell
 ```
@@ -1116,11 +1115,11 @@ This is a suggestion, not a product requirement. The spec is intentionally langu
 
 ## 22. State and Persistence
 
-### 22.1 Dirty State
+### 22.1 Autosave
 
-The TUI should track whether the graph has unsaved changes.
+The TUI should autosave after every successful graph mutation.
 
-Unsaved changes include:
+Autosaved changes include:
 
 1. Node added.
 2. Node text edited.
@@ -1130,9 +1129,7 @@ Unsaved changes include:
 6. Completion state changed.
 7. File order changed.
 
-### 22.2 Save
-
-Save behavior:
+Autosave behavior:
 
 1. Validate the graph.
 2. Serialize canonical text.
@@ -1140,14 +1137,17 @@ Save behavior:
    - write temp file in same directory
    - flush/close
    - rename over original
-4. Clear dirty state.
+4. Clear dirty state on success.
+5. If autosave fails, keep the in-memory change, mark the graph dirty, and show an error.
+
+There is no normal manual save key in v1. `W` remains the explicit rewrite/rekey command.
 
 ### 22.3 Quit
 
-If quitting with `q` and there are unsaved changes, prompt:
+If quitting with `q` and autosave has failed, prompt:
 
 ```text
-Unsaved changes. Save before quitting? [y]es / [n]o / [c]ancel
+Autosave failed. Retry save before quitting? [y]es / [n]o / [c]ancel
 ```
 
 `ctrl+c` should always force quit from any mode without prompting. `ctrl+z` should suspend to the shell from any mode, matching normal terminal expectations for a raw-mode TUI.
@@ -1246,7 +1246,7 @@ The user can remove `A -> B` without deleting `A` or `B`.
 
 ### 25.9 Edit Node Text
 
-Editing node ID `a` from text `A` to text `A2` preserves node ID `a`, preserves all edges, and updates canonical parent text hints on save.
+Editing node ID `a` from text `A` to text `A2` preserves node ID `a`, preserves all edges, and updates canonical parent text hints on autosave.
 
 ### 25.10 Delete
 

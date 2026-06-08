@@ -47,6 +47,11 @@ func TestRewriteRegeneratesIDsAndSaves(t *testing.T) {
 	}
 }
 
+func newTestModel(t *testing.T, g *graph.Graph) Model {
+	t.Helper()
+	return New(filepath.Join(t.TempDir(), "test.dagim"), g)
+}
+
 func TestNodeViewWrapsTextAndHidesIDs(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("parent-node-id", "Parent node"))
@@ -55,7 +60,7 @@ func TestNodeViewWrapsTextAndHidesIDs(t *testing.T) {
 	must(t, g.AddEdge("parent-node-id", "current-node-id"))
 	must(t, g.AddEdge("current-node-id", "long-child-id"))
 
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.current = "current-node-id"
 	m.width = 34
 	view := m.viewNode()
@@ -74,7 +79,7 @@ func TestWideViewCapsRulesAndAddsGutter(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeNode
 	m.current = "root-node"
 	m.width = 180
@@ -97,7 +102,7 @@ func TestWideViewCapsRulesAndAddsGutter(t *testing.T) {
 func TestInspectShowsIDs(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("current-node-id", "Current node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.inspectID = "current-node-id"
 	m.mode = modeInspect
 	view := m.View()
@@ -110,7 +115,7 @@ func TestInspectShowsIDs(t *testing.T) {
 func TestInspectReturnsToPreviousMode(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("current-node-id", "Current node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeInspect
 	m.previous = modeNode
 
@@ -131,7 +136,7 @@ func TestCheckViewReportsStatsAndTransitiveEdges(t *testing.T) {
 	must(t, g.AddEdge("b", "c"))
 	must(t, g.AddEdge("c", "d"))
 	must(t, g.AddEdge("a", "d"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeCheck
 
 	view := m.View()
@@ -153,7 +158,7 @@ func TestCheckViewReportsStatsAndTransitiveEdges(t *testing.T) {
 func TestReadyCanOpenCheckView(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 
 	next, _ := m.Update(runeKey('C'))
 	checking := next.(Model)
@@ -180,20 +185,20 @@ func TestCtrlCQuitsFromAnyMode(t *testing.T) {
 		m    Model
 	}{
 		{name: "node", m: func() Model {
-			m := New("test.dagim", g)
+			m := newTestModel(t, g)
 			m.mode = modeNode
 			return m
 		}()},
-		{name: "ready", m: New("test.dagim", g)},
+		{name: "ready", m: newTestModel(t, g)},
 		{name: "order", m: func() Model {
-			m := New("test.dagim", g)
+			m := newTestModel(t, g)
 			m.mode = modeOrder
 			m.order = graph.NewOrder(g)
 			m.orderReturn = modeReady
 			return m
 		}()},
 		{name: "prompt", m: func() Model {
-			m := New("test.dagim", g)
+			m := newTestModel(t, g)
 			m.mode = modePrompt
 			return m
 		}()},
@@ -213,7 +218,7 @@ func TestCtrlCQuitsFromAnyMode(t *testing.T) {
 func TestCtrlZSuspendsFromAnyMode(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeOrder
 	m.order = graph.NewOrder(g)
 	m.orderReturn = modeReady
@@ -233,7 +238,7 @@ func TestNewStartsOnReadyForNonEmptyGraph(t *testing.T) {
 	must(t, g.AddNodeWithID("child-node", "Child node"))
 	must(t, g.AddEdge("root-node", "child-node"))
 
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 
 	if m.mode != modeReady {
 		t.Fatalf("mode = %v", m.mode)
@@ -247,7 +252,7 @@ func TestNewStartsOnReadyForNonEmptyGraph(t *testing.T) {
 }
 
 func TestNewStartsEmptyGraphInNodeMode(t *testing.T) {
-	m := New("test.dagim", graph.New())
+	m := newTestModel(t, graph.New())
 
 	if m.mode != modeNode {
 		t.Fatalf("mode = %v", m.mode)
@@ -260,7 +265,7 @@ func TestNewStartsEmptyGraphInNodeMode(t *testing.T) {
 func TestNodeCanOpenEditPrompt(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeNode
 
 	next, _ := m.Update(runeKey('e'))
@@ -283,7 +288,7 @@ func TestNodeCanOpenEditPrompt(t *testing.T) {
 func TestNodeCanOpenReadyViewWithR(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeNode
 
 	next, _ := m.Update(runeKey('r'))
@@ -302,7 +307,7 @@ func TestNodeReordersSelectedChildWithinChildren(t *testing.T) {
 	must(t, g.AddNodeWithID("second-child", "Second child"))
 	must(t, g.AddEdge("current", "first-child"))
 	must(t, g.AddEdge("current", "second-child"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeNode
 	m.current = "current"
 
@@ -315,8 +320,8 @@ func TestNodeReordersSelectedChildWithinChildren(t *testing.T) {
 	if updated.cursor != 1 {
 		t.Fatalf("cursor after J = %d", updated.cursor)
 	}
-	if !updated.dirty {
-		t.Fatal("reorder should dirty the graph")
+	if updated.dirty {
+		t.Fatal("reorder should autosave and clear dirty state")
 	}
 
 	next, _ = updated.Update(runeKey('K'))
@@ -334,7 +339,7 @@ func TestNodeReorderDoesNothingWithoutVisibleRelation(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("current", "Current"))
 	must(t, g.AddNodeWithID("other", "Other"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeNode
 	m.current = "current"
 	before := g.Order()
@@ -350,37 +355,34 @@ func TestNodeReorderDoesNothingWithoutVisibleRelation(t *testing.T) {
 	}
 }
 
-func TestSaveUsesSKey(t *testing.T) {
+func TestEditAutosaves(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "test.dagim")
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	m := New(path, g)
 	m.mode = modeNode
 	m.current = "root-node"
-	m.dirty = true
 
-	next, _ := m.Update(runeKey('w'))
-	updated := next.(Model)
-	if !updated.dirty {
-		t.Fatal("w should not save")
-	}
 	if _, err := os.Stat(path); err == nil {
-		t.Fatal("w created a save file")
+		t.Fatal("file existed before autosave")
 	} else if !os.IsNotExist(err) {
 		t.Fatal(err)
 	}
 
-	next, _ = updated.Update(runeKey('s'))
-	updated = next.(Model)
+	next, _ := m.Update(runeKey('e'))
+	prompt := next.(Model)
+	prompt.input.SetValue("Renamed root")
+	next, _ = prompt.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := next.(Model)
 	if updated.dirty {
-		t.Fatal("s should save and clear dirty state")
+		t.Fatal("edit should autosave and clear dirty state")
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "Root node") {
-		t.Fatalf("saved file missing node text:\n%s", data)
+	if !strings.Contains(string(data), "Renamed root") {
+		t.Fatalf("autosaved file missing edited node text:\n%s", data)
 	}
 }
 
@@ -389,7 +391,7 @@ func TestReadyReordersHighlightedNode(t *testing.T) {
 	must(t, g.AddNodeWithID("first", "First"))
 	must(t, g.AddNodeWithID("second", "Second"))
 	must(t, g.AddNodeWithID("third", "Third"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 
 	next, _ := m.Update(runeKey('J'))
 	updated := next.(Model)
@@ -400,8 +402,8 @@ func TestReadyReordersHighlightedNode(t *testing.T) {
 	if updated.readyCursor != 1 {
 		t.Fatalf("readyCursor after J = %d", updated.readyCursor)
 	}
-	if !updated.dirty {
-		t.Fatal("ready reorder should dirty the graph")
+	if updated.dirty {
+		t.Fatal("ready reorder should autosave and clear dirty state")
 	}
 
 	next, _ = updated.Update(runeKey('K'))
@@ -421,7 +423,7 @@ func TestReadyMarksCompleteAndAdvances(t *testing.T) {
 	must(t, g.AddNodeWithID("c", "C"))
 	must(t, g.AddEdge("a", "c"))
 	must(t, g.AddEdge("b", "c"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 
 	next, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
 	updated := next.(Model)
@@ -444,7 +446,7 @@ func TestReadyCanShowCompletedAndMarkIncomplete(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("a", "A"))
 	must(t, g.SetComplete("a", true))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 
 	if view := m.View(); strings.Contains(view, "[x] A") {
 		t.Fatalf("completed node shown before toggle:\n%s", view)
@@ -476,7 +478,7 @@ func TestReadyMarkIncompleteCascadesToCompletedDescendants(t *testing.T) {
 	for _, id := range []graph.NodeID{"a", "b", "c"} {
 		must(t, g.MarkComplete(id))
 	}
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.showCompleted = true
 	m.readyCursor = 1
 
@@ -502,7 +504,7 @@ func TestNodeCannotMarkCompleteWithIncompleteParents(t *testing.T) {
 	must(t, g.AddNodeWithID("parent", "Parent"))
 	must(t, g.AddNodeWithID("current", "Current"))
 	must(t, g.AddEdge("parent", "current"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeNode
 	m.current = "current"
 
@@ -529,7 +531,7 @@ func TestAddIncompleteParentToCompletedNodeCascadesUndone(t *testing.T) {
 	must(t, g.AddEdge("current", "child"))
 	must(t, g.MarkComplete("current"))
 	must(t, g.MarkComplete("child"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.current = "current"
 	m.mode = modePrompt
 	m.promptAction = promptAddParent
@@ -561,7 +563,7 @@ func TestNodeViewHidesCompletedRelationsUntilToggled(t *testing.T) {
 	must(t, g.AddNodeWithID("current", "Current"))
 	must(t, g.AddEdge("parent", "current"))
 	must(t, g.SetComplete("parent", true))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeNode
 	m.current = "current"
 
@@ -579,7 +581,7 @@ func TestResetCompletionRequiresConfirm(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("a", "A"))
 	must(t, g.SetComplete("a", true))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 
 	next, _ := m.Update(runeKey('R'))
 	confirming := next.(Model)
@@ -592,8 +594,8 @@ func TestResetCompletionRequiresConfirm(t *testing.T) {
 	if node.Complete {
 		t.Fatal("completion was not reset")
 	}
-	if !updated.dirty {
-		t.Fatal("reset should dirty the graph")
+	if updated.dirty {
+		t.Fatal("reset should autosave and clear dirty state")
 	}
 	if updated.mode != modeReady {
 		t.Fatalf("mode = %v", updated.mode)
@@ -603,7 +605,7 @@ func TestResetCompletionRequiresConfirm(t *testing.T) {
 func TestReadyCanOpenAddNodePrompt(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 
 	next, _ := m.Update(runeKey('a'))
 	updated := next.(Model)
@@ -625,7 +627,7 @@ func TestReadyCanOpenAddNodePrompt(t *testing.T) {
 func TestReadyCanStartOrder(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 
 	next, _ := m.Update(runeKey('o'))
 	updated := next.(Model)
@@ -647,7 +649,7 @@ func TestReadyCanStartOrder(t *testing.T) {
 func TestOrderEscReturnsToLaunchingMode(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 
 	next, _ := m.Update(runeKey('o'))
 	ordering := next.(Model)
@@ -662,7 +664,7 @@ func TestOrderEscReturnsToLaunchingMode(t *testing.T) {
 func TestOrderInspectDoesNotLoseReadyReturnMode(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 
 	next, _ := m.Update(runeKey('o'))
 	ordering := next.(Model)
@@ -688,7 +690,7 @@ func TestOrderInspectDoesNotLoseReadyReturnMode(t *testing.T) {
 func TestOrderQReturnsToLaunchingMode(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 
 	next, _ := m.Update(runeKey('o'))
 	ordering := next.(Model)
@@ -703,7 +705,7 @@ func TestOrderQReturnsToLaunchingMode(t *testing.T) {
 func TestNodeOrderEscReturnsToNode(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeNode
 
 	next, _ := m.Update(runeKey('o'))
@@ -720,7 +722,7 @@ func TestReadyEscDoesNotEnterNodeView(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("first-root", "First root"))
 	must(t, g.AddNodeWithID("second-root", "Second root"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.readyCursor = 1
 
 	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -740,7 +742,7 @@ func TestReadyEscDoesNotEnterNodeView(t *testing.T) {
 func TestReadySearchEscReturnsToReady(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 
 	next, _ := m.Update(runeKey('/'))
 	searching := next.(Model)
@@ -758,7 +760,7 @@ func TestReadySearchEscReturnsToReady(t *testing.T) {
 func TestSearchTreatsPrintableKeysAsInput(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("log-into-bank", "Log into bank"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 
 	next, _ := m.Update(runeKey('/'))
 	searching := next.(Model)
@@ -779,7 +781,7 @@ func TestSearchTreatsPrintableKeysAsInput(t *testing.T) {
 func TestSearchDoesNotMatchHiddenIDAfterEdit(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("shred-chicken-give-curt", "Shred or cut chicken into small pieces, give to Curt"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeNode
 	m.current = "shred-chicken-give-curt"
 
@@ -793,7 +795,7 @@ func TestSearchDoesNotMatchHiddenIDAfterEdit(t *testing.T) {
 func TestReadyHelpEscReturnsToReady(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 
 	next, _ := m.Update(runeKey('?'))
 	helping := next.(Model)
@@ -811,7 +813,7 @@ func TestReadyHelpEscReturnsToReady(t *testing.T) {
 func TestReadyQuitCancelReturnsToReady(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.dirty = true
 
 	next, _ := m.Update(runeKey('q'))
@@ -832,7 +834,7 @@ func TestNodeCanOpenLeavesView(t *testing.T) {
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	must(t, g.AddNodeWithID("leaf-node", "Leaf node"))
 	must(t, g.AddEdge("root-node", "leaf-node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeNode
 	m.current = "root-node"
 
@@ -862,7 +864,7 @@ func TestReadyCanOpenLeavesView(t *testing.T) {
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	must(t, g.AddNodeWithID("leaf-node", "Leaf node"))
 	must(t, g.AddEdge("root-node", "leaf-node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 
 	next, _ := m.Update(runeKey('l'))
 	updated := next.(Model)
@@ -885,7 +887,7 @@ func TestLeavesEnterFocusesSelectedLeaf(t *testing.T) {
 	must(t, g.AddNodeWithID("second-leaf", "Second leaf"))
 	must(t, g.AddEdge("root-node", "first-leaf"))
 	must(t, g.AddEdge("root-node", "second-leaf"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeLeaves
 	m.leavesCursor = 1
 
@@ -905,7 +907,7 @@ func TestLeavesEnterClampsStaleCursor(t *testing.T) {
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	must(t, g.AddNodeWithID("leaf-node", "Leaf node"))
 	must(t, g.AddEdge("root-node", "leaf-node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeLeaves
 	m.leavesCursor = 10
 
@@ -927,7 +929,7 @@ func TestLeavesReordersHighlightedNode(t *testing.T) {
 	must(t, g.AddNodeWithID("second-leaf", "Second leaf"))
 	must(t, g.AddEdge("root-node", "first-leaf"))
 	must(t, g.AddEdge("root-node", "second-leaf"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeLeaves
 
 	next, _ := m.Update(runeKey('J'))
@@ -939,8 +941,8 @@ func TestLeavesReordersHighlightedNode(t *testing.T) {
 	if updated.leavesCursor != 1 {
 		t.Fatalf("leavesCursor after J = %d", updated.leavesCursor)
 	}
-	if !updated.dirty {
-		t.Fatal("leaves reorder should dirty the graph")
+	if updated.dirty {
+		t.Fatal("leaves reorder should autosave and clear dirty state")
 	}
 
 	next, _ = updated.Update(runeKey('K'))
@@ -958,7 +960,7 @@ func TestLeavesEscReturnsToLaunchingMode(t *testing.T) {
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	must(t, g.AddNodeWithID("leaf-node", "Leaf node"))
 	must(t, g.AddEdge("root-node", "leaf-node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeNode
 	m.current = "root-node"
 
@@ -980,7 +982,7 @@ func TestLeavesInspectDoesNotLoseLaunchingMode(t *testing.T) {
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	must(t, g.AddNodeWithID("leaf-node", "Leaf node"))
 	must(t, g.AddEdge("root-node", "leaf-node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeNode
 	m.current = "root-node"
 
@@ -1010,7 +1012,7 @@ func TestLeavesSearchEscReturnsToLeaves(t *testing.T) {
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	must(t, g.AddNodeWithID("leaf-node", "Leaf node"))
 	must(t, g.AddEdge("root-node", "leaf-node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeLeaves
 
 	next, _ := m.Update(runeKey('/'))
@@ -1031,7 +1033,7 @@ func TestLeavesCanOpenReadyViewWithR(t *testing.T) {
 	must(t, g.AddNodeWithID("root-node", "Root node"))
 	must(t, g.AddNodeWithID("leaf-node", "Leaf node"))
 	must(t, g.AddEdge("root-node", "leaf-node"))
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.mode = modeLeaves
 
 	next, _ := m.Update(runeKey('r'))
@@ -1051,7 +1053,7 @@ func TestLinkPromptHidesDuplicateEdgeCandidates(t *testing.T) {
 	must(t, g.AddEdge("parent", "current"))
 	must(t, g.AddEdge("current", "child"))
 
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.current = "current"
 
 	m.promptAction = promptAddParent
@@ -1090,7 +1092,7 @@ func TestLinkPromptHidesCycleCandidates(t *testing.T) {
 	must(t, g.AddEdge("parent", "current"))
 	must(t, g.AddEdge("current", "child"))
 
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.current = "current"
 
 	parentCandidates := m.linkCandidates("", promptAddParent)
@@ -1116,7 +1118,7 @@ func TestTypedCycleCandidateStillShowsGraphError(t *testing.T) {
 	must(t, g.AddNodeWithID("child", "Child"))
 	must(t, g.AddEdge("current", "child"))
 
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.current = "current"
 	m.mode = modePrompt
 	m.promptAction = promptAddParent
@@ -1142,7 +1144,7 @@ func TestLinkPromptWindowsMatchesToTerminalHeight(t *testing.T) {
 		must(t, g.AddNodeWithID(id, text))
 	}
 
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.current = "current"
 	m.mode = modePrompt
 	m.promptAction = promptAddChild
@@ -1177,7 +1179,7 @@ func TestLinkPromptShowsNoEligibleMatchesMessage(t *testing.T) {
 	must(t, g.AddNodeWithID("current", "Current"))
 	must(t, g.AddEdge("parent", "current"))
 
-	m := New("test.dagim", g)
+	m := newTestModel(t, g)
 	m.current = "current"
 	m.promptAction = promptAddParent
 	m.promptTitle = "Add/link parent"
