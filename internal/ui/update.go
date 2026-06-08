@@ -248,15 +248,14 @@ func (m Model) submitPrompt(useSuggestion bool) (tea.Model, tea.Cmd) {
 		if ok {
 			var err error
 			if asParent {
-				err = m.g.AddEdge(id, m.current)
+				m, err = m.addEdge(id, m.current)
 			} else {
-				err = m.g.AddEdge(m.current, id)
+				m, err = m.addEdge(m.current, id)
 			}
 			if err != nil {
 				m.message = err.Error()
 				return m, nil
 			}
-			m.dirty = true
 		} else {
 			m = m.addLinkedNode(value, asParent)
 		}

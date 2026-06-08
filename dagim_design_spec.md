@@ -105,6 +105,12 @@ Renaming a node updates the text label but does not change the ID by default. A 
 
 Completion state marks whether a node has been done. Completion is current working state, not history: version 1 stores no timestamp and no event log. Completed nodes remain part of the graph and keep all parent/child edges.
 
+The completed set must be dependency-closed:
+
+1. A node can be marked complete only when all parents are complete.
+2. Marking a completed node incomplete also marks every completed descendant incomplete.
+3. Alternate upstream paths do not create an exception: if any required parent becomes incomplete, completed descendants are no longer valid.
+
 Examples:
 
 ```text
@@ -535,6 +541,8 @@ Wrapped rows in selectable node lists should use a hanging indent on continuatio
 
 On wide terminals, the TUI should remain left-anchored with a modest gutter and a capped content width. Separators and wrapped text should not stretch across an entire large monitor.
 
+Command panels should render as aligned grids rather than hand-spaced prose rows.
+
 ### 11.2 Suggested Keybindings
 
 These are proposed defaults, not sacred API.
@@ -596,7 +604,8 @@ Behavior:
 3. If the text does not match an existing node, offer to create a new node and generate an ID for it.
 4. Reject if the edge already exists.
 5. Reject if it would create a cycle.
-6. On success, keep focus on the current node unless user preference later says otherwise.
+6. If the new parent is incomplete and the current node is complete, mark the current node and all completed descendants incomplete.
+7. On success, keep focus on the current node unless user preference later says otherwise.
 
 The autocomplete list should hide the current node, nodes already linked in the requested direction, and nodes that would create a cycle if linked. This is a usability filter; graph operations must still reject duplicate edges and cycles because typed exact matches can bypass the suggestion list.
 
@@ -707,7 +716,7 @@ Rules:
 2. Open here by default for non-empty graphs.
 3. Do not automatically linearize the graph.
 4. Enter focuses a selected node.
-5. Space toggles the selected ready node complete or incomplete.
+5. Space toggles the selected ready node complete or incomplete. Marking a completed node incomplete cascades to completed descendants.
 6. `a` adds a new unlinked node; because it has no parents and is incomplete, it appears in ready until completed or linked behind an incomplete parent.
 7. `o` enters order remaining mode.
 8. `v` toggles visibility of completed nodes for review.
@@ -1342,6 +1351,7 @@ The user can export the current or completed order as one node per line.
 14. Leaves computed correctly.
 15. Reorder node earlier/later changes file order only.
 16. Reorder selected child changes child display order without changing edges.
+17. Completed nodes with incomplete parents are rejected by validation.
 
 ### 26.4 Completion And Order Tests
 
@@ -1349,10 +1359,13 @@ The user can export the current or completed order as one node per line.
 2. Single incomplete node is ready initially.
 3. Completed nodes are not ready.
 4. Child becomes ready only after all parents are complete.
-5. Available nodes are displayed in file order.
-6. Order mode starts with completed nodes already processed.
-7. Undo recomputes available nodes.
-8. Reset clears temporary order state but does not clear graph completion.
+5. A node cannot be marked complete until all parents are complete.
+6. Marking a completed node incomplete cascades to completed descendants.
+7. Adding an incomplete parent to a completed node cascades that node and completed descendants incomplete.
+8. Available nodes are displayed in file order.
+9. Order mode starts with completed nodes already processed.
+10. Undo recomputes available nodes.
+11. Reset clears temporary order state but does not clear graph completion.
 
 ## 27. Future Ideas
 

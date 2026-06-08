@@ -38,6 +38,7 @@ var (
 	ErrDuplicateEdge = errors.New("duplicate edge")
 	ErrSelfEdge      = errors.New("self edge")
 	ErrCycle         = errors.New("cycle")
+	ErrBlocked       = errors.New("blocked by incomplete parents")
 )
 
 func New() *Graph {
@@ -132,6 +133,70 @@ func (g *Graph) SetComplete(id NodeID, complete bool) error {
 	node.Complete = complete
 	g.nodes[id] = node
 	return nil
+}
+
+func (g *Graph) MarkComplete(id NodeID) error {
+	id = cleanID(id)
+	incomplete, err := g.IncompleteParentsOf(id)
+	if err != nil {
+		return err
+	}
+	if len(incomplete) > 0 {
+		return BlockedError{Node: id, Parents: incomplete}
+	}
+	node := g.nodes[id]
+	node.Complete = true
+	g.nodes[id] = node
+	return nil
+}
+
+func (g *Graph) MarkIncompleteCascade(id NodeID) (int, error) {
+	id = cleanID(id)
+	if !g.HasNode(id) {
+		return 0, fmt.Errorf("%w: %s", ErrUnknownNode, id)
+	}
+	affected := map[NodeID]struct{}{id: {}}
+	var walk func(NodeID)
+	walk = func(current NodeID) {
+		children, _ := g.ChildrenOf(current)
+		for _, child := range children {
+			if _, seen := affected[child]; seen {
+				continue
+			}
+			affected[child] = struct{}{}
+			walk(child)
+		}
+	}
+	walk(id)
+
+	count := 0
+	for _, current := range g.order {
+		if _, ok := affected[current]; !ok {
+			continue
+		}
+		node := g.nodes[current]
+		if !node.Complete {
+			continue
+		}
+		node.Complete = false
+		g.nodes[current] = node
+		count++
+	}
+	return count, nil
+}
+
+func (g *Graph) IncompleteParentsOf(id NodeID) ([]NodeID, error) {
+	parents, err := g.ParentsOf(id)
+	if err != nil {
+		return nil, err
+	}
+	incomplete := make([]NodeID, 0)
+	for _, parent := range parents {
+		if !g.nodes[parent].Complete {
+			incomplete = append(incomplete, parent)
+		}
+	}
+	return incomplete, nil
 }
 
 func (g *Graph) RekeyByText() (map[NodeID]NodeID, error) {
@@ -379,6 +444,15 @@ func (g *Graph) Validate() error {
 				return fmt.Errorf("%w: %s", ErrUnknownNode, parent)
 			}
 		}
+		if node.Complete {
+			incomplete, err := g.IncompleteParentsOf(id)
+			if err != nil {
+				return err
+			}
+			if len(incomplete) > 0 {
+				return BlockedError{Node: id, Parents: incomplete}
+			}
+		}
 	}
 	if cycle, found := g.findCycle(); found {
 		return CycleError{Path: cycle}
@@ -449,6 +523,11 @@ type CycleError struct {
 	Path []NodeID
 }
 
+type BlockedError struct {
+	Node    NodeID
+	Parents []NodeID
+}
+
 func (e CycleError) Error() string {
 	if len(e.Path) == 0 {
 		return ErrCycle.Error()
@@ -462,6 +541,18 @@ func (e CycleError) Error() string {
 
 func (e CycleError) Is(target error) bool {
 	return target == ErrCycle
+}
+
+func (e BlockedError) Error() string {
+	parts := make([]string, 0, len(e.Parents))
+	for _, id := range e.Parents {
+		parts = append(parts, string(id))
+	}
+	return fmt.Sprintf("%s: %s needs %s", ErrBlocked, e.Node, strings.Join(parts, ", "))
+}
+
+func (e BlockedError) Is(target error) bool {
+	return target == ErrBlocked
 }
 
 func (g *Graph) sortedIDs(set map[NodeID]struct{}) []NodeID {

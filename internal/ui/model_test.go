@@ -416,6 +416,95 @@ func TestReadyCanShowCompletedAndMarkIncomplete(t *testing.T) {
 	}
 }
 
+func TestReadyMarkIncompleteCascadesToCompletedDescendants(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("a", "A"))
+	must(t, g.AddNodeWithID("b", "B"))
+	must(t, g.AddNodeWithID("c", "C"))
+	must(t, g.AddEdge("a", "b"))
+	must(t, g.AddEdge("b", "c"))
+	for _, id := range []graph.NodeID{"a", "b", "c"} {
+		must(t, g.MarkComplete(id))
+	}
+	m := New("test.dagim", g)
+	m.showCompleted = true
+	m.readyCursor = 1
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	updated := next.(Model)
+
+	a, _ := updated.g.Node("a")
+	b, _ := updated.g.Node("b")
+	c, _ := updated.g.Node("c")
+	if !a.Complete || b.Complete || c.Complete {
+		t.Fatalf("complete states: a=%v b=%v c=%v", a.Complete, b.Complete, c.Complete)
+	}
+	if updated.message != "marked 2 nodes undone" {
+		t.Fatalf("message = %q", updated.message)
+	}
+	if got := updated.g.Ready(); !reflect.DeepEqual(got, []graph.NodeID{"b"}) {
+		t.Fatalf("ready = %#v", got)
+	}
+}
+
+func TestNodeCannotMarkCompleteWithIncompleteParents(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("parent", "Parent"))
+	must(t, g.AddNodeWithID("current", "Current"))
+	must(t, g.AddEdge("parent", "current"))
+	m := New("test.dagim", g)
+	m.mode = modeNode
+	m.current = "current"
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	updated := next.(Model)
+
+	node, _ := updated.g.Node("current")
+	if node.Complete {
+		t.Fatal("blocked node was marked complete")
+	}
+	if updated.dirty {
+		t.Fatal("blocked completion should not dirty the graph")
+	}
+	if updated.message != "blocked by 1 undone parent" {
+		t.Fatalf("message = %q", updated.message)
+	}
+}
+
+func TestAddIncompleteParentToCompletedNodeCascadesUndone(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("new-parent", "New parent"))
+	must(t, g.AddNodeWithID("current", "Current"))
+	must(t, g.AddNodeWithID("child", "Child"))
+	must(t, g.AddEdge("current", "child"))
+	must(t, g.MarkComplete("current"))
+	must(t, g.MarkComplete("child"))
+	m := New("test.dagim", g)
+	m.current = "current"
+	m.mode = modePrompt
+	m.promptAction = promptAddParent
+	m.input.SetValue("New parent")
+
+	next, _ := m.submitPrompt(false)
+	updated := next.(Model)
+
+	parents, _ := updated.g.ParentsOf("current")
+	if !reflect.DeepEqual(parents, []graph.NodeID{"new-parent"}) {
+		t.Fatalf("parents = %#v", parents)
+	}
+	current, _ := updated.g.Node("current")
+	child, _ := updated.g.Node("child")
+	if current.Complete || child.Complete {
+		t.Fatalf("complete states: current=%v child=%v", current.Complete, child.Complete)
+	}
+	if updated.message != "linked; marked 2 nodes undone" {
+		t.Fatalf("message = %q", updated.message)
+	}
+	if err := updated.g.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestNodeViewHidesCompletedRelationsUntilToggled(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("parent", "Parent"))

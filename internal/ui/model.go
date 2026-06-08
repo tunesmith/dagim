@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -352,17 +353,39 @@ func (m Model) toggleComplete(id graph.NodeID) Model {
 		m.message = "node missing"
 		return m
 	}
-	next := !node.Complete
-	if err := m.g.SetComplete(id, next); err != nil {
+	if node.Complete {
+		count, err := m.g.MarkIncompleteCascade(id)
+		if err != nil {
+			m.message = err.Error()
+			return m
+		}
+		if count == 0 {
+			m.message = "already undone"
+			return m
+		}
+		m.dirty = true
+		if count == 1 {
+			m.message = "marked undone"
+		} else {
+			m.message = fmt.Sprintf("marked %d nodes undone", count)
+		}
+		return m
+	}
+	if err := m.g.MarkComplete(id); err != nil {
+		var blocked graph.BlockedError
+		if errors.As(err, &blocked) {
+			if len(blocked.Parents) == 1 {
+				m.message = "blocked by 1 undone parent"
+			} else {
+				m.message = fmt.Sprintf("blocked by %d undone parents", len(blocked.Parents))
+			}
+			return m
+		}
 		m.message = err.Error()
 		return m
 	}
 	m.dirty = true
-	if next {
-		m.message = "marked complete"
-	} else {
-		m.message = "marked incomplete"
-	}
+	m.message = "marked done"
 	return m
 }
 
@@ -524,17 +547,37 @@ func (m Model) addLinkedNode(text string, asParent bool) Model {
 		return m
 	}
 	if asParent {
-		err = m.g.AddEdge(id, m.current)
+		m, err = m.addEdge(id, m.current)
 	} else {
-		err = m.g.AddEdge(m.current, id)
+		m, err = m.addEdge(m.current, id)
 	}
 	if err != nil {
 		_ = m.g.DeleteNode(id)
 		m.message = err.Error()
 		return m
 	}
-	m.dirty = true
 	return m
+}
+
+func (m Model) addEdge(parent, child graph.NodeID) (Model, error) {
+	if err := m.g.AddEdge(parent, child); err != nil {
+		return m, err
+	}
+	m.dirty = true
+	parentNode, parentOK := m.g.Node(parent)
+	childNode, childOK := m.g.Node(child)
+	if parentOK && childOK && childNode.Complete && !parentNode.Complete {
+		count, err := m.g.MarkIncompleteCascade(child)
+		if err != nil {
+			return m, err
+		}
+		if count == 1 {
+			m.message = "linked; marked 1 node undone"
+		} else if count > 1 {
+			m.message = fmt.Sprintf("linked; marked %d nodes undone", count)
+		}
+	}
+	return m, nil
 }
 
 func inputWidth(width int) int {

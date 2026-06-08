@@ -132,15 +132,13 @@ func (m Model) viewNode() string {
 	b.WriteByte('\n')
 	b.WriteString(m.rule())
 	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("a add node    p add parent    c add child    x unlink"))
-	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("i inspect     e edit          d delete       / search"))
-	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("r ready       l leaves        o order       s save"))
-	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("Space done/undone  v completed  R reset  W rewrite"))
-	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("J/K reorder   q quit          ? help"))
+	b.WriteString(renderCommandGrid([][]string{
+		{"a add node", "p add parent", "c add child", "x unlink"},
+		{"i inspect", "e edit", "d delete", "/ search"},
+		{"r ready", "l leaves", "o order", "s save"},
+		{"Space done/undone", "v completed", "R reset", "W rewrite"},
+		{"J/K reorder", "q quit", "? help"},
+	}))
 	return b.String()
 }
 
@@ -252,13 +250,12 @@ func (m Model) viewReady() string {
 		}
 	}
 	b.WriteString("\n")
-	b.WriteString(commandStyle.Render("a add node    Enter focus    Space done/undone  / search"))
-	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("i inspect     v completed    o order       l leaves"))
-	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("R reset       W rewrite      J/K reorder  s save"))
-	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("q quit        ? help"))
+	b.WriteString(renderCommandGrid([][]string{
+		{"a add node", "Enter focus", "Space done/undone", "/ search"},
+		{"i inspect", "v completed", "o order", "l leaves"},
+		{"R reset", "W rewrite", "J/K reorder", "s save"},
+		{"q quit", "? help"},
+	}))
 	return b.String()
 }
 
@@ -279,13 +276,12 @@ func (m Model) viewLeaves() string {
 		}
 	}
 	b.WriteString("\n")
-	b.WriteString(commandStyle.Render("Enter focus    Space done/undone  i inspect  / search"))
-	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("r ready        v completed   o order      J/K reorder"))
-	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("R reset        W rewrite     s save       q quit"))
-	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("Esc back       ? help"))
+	b.WriteString(renderCommandGrid([][]string{
+		{"Enter focus", "Space done/undone", "i inspect", "/ search"},
+		{"r ready", "v completed", "o order", "J/K reorder"},
+		{"R reset", "W rewrite", "s save", "q quit"},
+		{"Esc back", "? help"},
+	}))
 	return b.String()
 }
 
@@ -334,9 +330,10 @@ func (m Model) viewOrder() string {
 		}
 	}
 	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("Space pick    Enter inspect    u undo    r reset"))
-	b.WriteByte('\n')
-	b.WriteString(commandStyle.Render("e export      Esc/q exit"))
+	b.WriteString(renderCommandGrid([][]string{
+		{"Space pick", "Enter inspect", "u undo", "r reset"},
+		{"e export", "Esc/q exit"},
+	}))
 	return b.String()
 }
 
@@ -425,6 +422,34 @@ func (m Model) viewHelp() string {
 		"",
 		commandStyle.Render("Esc back"),
 	}, "\n")
+}
+
+func renderCommandGrid(rows [][]string) string {
+	maxWidth := 0
+	for _, row := range rows {
+		for _, cell := range row {
+			if len(cell) > maxWidth {
+				maxWidth = len(cell)
+			}
+		}
+	}
+	cellWidth := maxWidth + 4
+	var b strings.Builder
+	for rowIndex, row := range rows {
+		var line strings.Builder
+		for i, cell := range row {
+			if i == len(row)-1 {
+				line.WriteString(cell)
+				continue
+			}
+			line.WriteString(fmt.Sprintf("%-*s", cellWidth, cell))
+		}
+		b.WriteString(commandStyle.Render(strings.TrimRight(line.String(), " ")))
+		if rowIndex < len(rows)-1 {
+			b.WriteByte('\n')
+		}
+	}
+	return b.String()
 }
 
 func (m Model) renderSelectable(selected bool, text string) string {

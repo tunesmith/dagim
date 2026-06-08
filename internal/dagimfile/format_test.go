@@ -28,8 +28,10 @@ node c: C
   parent b
 
 node a: A
+  complete
 
 node b: B
+  complete
 `)
 	if err != nil {
 		t.Fatal(err)
@@ -75,6 +77,7 @@ func TestParseRejectsInvalidInput(t *testing.T) {
 		"  parent a\nnode a: A\n",
 		"  complete\nnode a: A\n",
 		"node a: A\n  parent a\n",
+		"node a: A\nnode b: B\n  complete\n  parent a\n",
 		"node a: A\n  parent b\n  parent b\nnode b: B\n",
 		"not valid\n",
 	}

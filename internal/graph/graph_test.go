@@ -212,6 +212,90 @@ func TestReadyUsesCompletionState(t *testing.T) {
 	}
 }
 
+func TestMarkCompleteRequiresCompleteParents(t *testing.T) {
+	g := mustGraph(t, "a", "A", "b", "B", "c", "C")
+	mustAddEdge(t, g, "a", "c")
+	mustAddEdge(t, g, "b", "c")
+
+	err := g.MarkComplete("c")
+	if !errors.Is(err, ErrBlocked) {
+		t.Fatalf("err = %v", err)
+	}
+	var blocked BlockedError
+	if !errors.As(err, &blocked) {
+		t.Fatalf("blocked error did not expose parents: %v", err)
+	}
+	if !reflect.DeepEqual(blocked.Parents, []NodeID{"a", "b"}) {
+		t.Fatalf("blocked parents = %#v", blocked.Parents)
+	}
+	node, _ := g.Node("c")
+	if node.Complete {
+		t.Fatal("blocked node was marked complete")
+	}
+
+	if err := g.MarkComplete("a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.MarkComplete("b"); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.MarkComplete("c"); err != nil {
+		t.Fatal(err)
+	}
+	node, _ = g.Node("c")
+	if !node.Complete {
+		t.Fatal("unblocked node was not marked complete")
+	}
+}
+
+func TestMarkIncompleteCascadeClearsCompletedDescendants(t *testing.T) {
+	g := mustGraph(t, "a", "A", "b", "B", "alt", "Alt", "c", "C", "sibling", "Sibling")
+	mustAddEdge(t, g, "a", "b")
+	mustAddEdge(t, g, "b", "c")
+	mustAddEdge(t, g, "alt", "c")
+	mustAddEdge(t, g, "a", "sibling")
+	for _, id := range []NodeID{"a", "alt", "b", "c", "sibling"} {
+		if err := g.MarkComplete(id); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	count, err := g.MarkIncompleteCascade("b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Fatalf("count = %d", count)
+	}
+	for _, id := range []NodeID{"b", "c"} {
+		node, _ := g.Node(id)
+		if node.Complete {
+			t.Fatalf("%s remained complete", id)
+		}
+	}
+	for _, id := range []NodeID{"a", "alt", "sibling"} {
+		node, _ := g.Node(id)
+		if !node.Complete {
+			t.Fatalf("%s was unexpectedly marked incomplete", id)
+		}
+	}
+	if got := g.Ready(); !reflect.DeepEqual(got, []NodeID{"b"}) {
+		t.Fatalf("ready = %#v", got)
+	}
+}
+
+func TestValidateRejectsBlockedCompletionState(t *testing.T) {
+	g := mustGraph(t, "a", "A", "b", "B")
+	mustAddEdge(t, g, "a", "b")
+	if err := g.SetComplete("b", true); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := g.Validate(); !errors.Is(err, ErrBlocked) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestOrderStartsFromCompletionState(t *testing.T) {
 	g := mustGraph(t, "a", "A", "b", "B", "c", "C")
 	mustAddEdge(t, g, "a", "c")
