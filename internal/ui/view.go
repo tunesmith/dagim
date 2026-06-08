@@ -18,7 +18,7 @@ var (
 	titleStyle    = lipgloss.NewStyle().Bold(true)
 	mutedStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
-	selectStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
+	selectStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("178")).Bold(true)
 	nodeStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Bold(true)
 	completeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Strikethrough(true)
 	commandStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
