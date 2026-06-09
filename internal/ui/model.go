@@ -232,6 +232,14 @@ func (m Model) searchResultWindow(total int) (int, int) {
 	return windowAroundCursor(total, m.searchCursor, m.searchResultLimit())
 }
 
+func (m Model) readyItemWindow(total int) (int, int) {
+	return windowAroundCursor(total, m.readyCursor, m.listItemLimit())
+}
+
+func (m Model) leavesWindow(total int) (int, int) {
+	return windowAroundCursor(total, m.leavesCursor, m.listItemLimit())
+}
+
 func windowAroundCursor(total, cursor, limit int) (int, int) {
 	if total <= 0 {
 		return 0, 0
@@ -283,6 +291,25 @@ func (m Model) searchResultLimit() int {
 		return maxResults
 	}
 	return limit
+}
+
+func (m Model) listItemLimit() int {
+	if m.height <= 0 {
+		return 18
+	}
+	limit := m.height - 3 // title, rule, footer
+	if limit < 1 {
+		return 1
+	}
+	return limit
+}
+
+func (m Model) listPageSize() int {
+	size := m.listItemLimit() - 1
+	if size < 1 {
+		return 1
+	}
+	return size
 }
 
 func (m Model) selectedSuggestion() (graph.NodeID, bool) {
@@ -648,4 +675,11 @@ func indexOfID(ids []graph.NodeID, want graph.NodeID) int {
 		}
 	}
 	return -1
+}
+
+func moveListCursor(cursor, total, delta int) int {
+	if total <= 0 {
+		return 0
+	}
+	return clampInt(cursor+delta, 0, total-1)
 }

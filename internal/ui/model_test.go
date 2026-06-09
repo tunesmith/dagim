@@ -553,6 +553,120 @@ func TestReadyCanShowCompletedAndMarkIncomplete(t *testing.T) {
 	}
 }
 
+func TestReadyDeletesSelectedNodeWithConfirmation(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("a", "A"))
+	must(t, g.AddNodeWithID("b", "B"))
+	must(t, g.AddNodeWithID("c", "C"))
+	must(t, g.AddEdge("b", "c"))
+	m := newTestModel(t, g)
+	m.readyCursor = 1
+
+	next, _ := m.Update(runeKey('d'))
+	confirming := next.(Model)
+	if confirming.mode != modeConfirmDelete {
+		t.Fatalf("mode = %v", confirming.mode)
+	}
+	if confirming.previous != modeReady {
+		t.Fatalf("previous = %v", confirming.previous)
+	}
+	if confirming.current != "b" {
+		t.Fatalf("delete target current = %q", confirming.current)
+	}
+	if view := confirming.viewConfirmDelete(); !strings.Contains(view, "B") {
+		t.Fatalf("confirm view did not show selected node:\n%s", view)
+	}
+
+	next, _ = confirming.Update(runeKey('n'))
+	cancelled := next.(Model)
+	if cancelled.mode != modeReady {
+		t.Fatalf("mode after cancel = %v", cancelled.mode)
+	}
+	if !cancelled.g.HasNode("b") {
+		t.Fatal("cancel deleted node")
+	}
+
+	next, _ = cancelled.Update(runeKey('d'))
+	confirming = next.(Model)
+	next, _ = confirming.Update(runeKey('y'))
+	updated := next.(Model)
+	if updated.mode != modeReady {
+		t.Fatalf("mode after delete = %v", updated.mode)
+	}
+	if updated.g.HasNode("b") {
+		t.Fatal("selected ready node was not deleted")
+	}
+	if got := updated.g.Ready(); !reflect.DeepEqual(got, []graph.NodeID{"a", "c"}) {
+		t.Fatalf("ready after delete = %#v", got)
+	}
+	if updated.dirty {
+		t.Fatal("delete should autosave and clear dirty state")
+	}
+}
+
+func TestReadyWindowsItemsToTerminalHeight(t *testing.T) {
+	g := graph.New()
+	for i := 1; i <= 25; i++ {
+		id := graph.NodeID(fmt.Sprintf("ready-%02d", i))
+		text := fmt.Sprintf("Ready item %02d", i)
+		must(t, g.AddNodeWithID(id, text))
+	}
+	m := newTestModel(t, g)
+	m.height = 12
+	m.width = 48
+
+	view := m.viewReady()
+	if !strings.Contains(view, "Ready 1-5 of 25") {
+		t.Fatalf("expected initial ready window:\n%s", view)
+	}
+	if strings.Contains(view, "Ready item 06") {
+		t.Fatalf("rendered beyond visible ready window:\n%s", view)
+	}
+	if lines := strings.Count(view, "\n") + 1; lines > m.height {
+		t.Fatalf("view has %d lines, height %d:\n%s", lines, m.height, view)
+	}
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	paged := next.(Model)
+	if paged.readyCursor != 8 {
+		t.Fatalf("readyCursor after PgDown = %d", paged.readyCursor)
+	}
+
+	paged.readyCursor = 14
+	view = paged.viewReady()
+	if !strings.Contains(view, "Ready 13-17 of 25") {
+		t.Fatalf("expected centered ready window:\n%s", view)
+	}
+	if !strings.Contains(view, "Ready item 15") {
+		t.Fatalf("selected ready item not visible:\n%s", view)
+	}
+}
+
+func TestReadyWrapsItemsWithContinuationIndent(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("long-ready", "This ready item has enough words to wrap onto another line cleanly"))
+	m := newTestModel(t, g)
+	m.height = 14
+	m.width = 36
+
+	view := m.viewReady()
+	for _, want := range []string{
+		"This ready item has enough words",
+		"\n    to wrap onto another line",
+		"\n    cleanly",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("missing wrapped text %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "This ready item has enough words...") {
+		t.Fatalf("ready item was truncated:\n%s", view)
+	}
+	if lines := strings.Count(view, "\n") + 1; lines > m.height {
+		t.Fatalf("view has %d lines, height %d:\n%s", lines, m.height, view)
+	}
+}
+
 func TestReadyMarkIncompleteCascadesToCompletedDescendants(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("a", "A"))
@@ -605,6 +719,42 @@ func TestNodeCannotMarkCompleteWithIncompleteParents(t *testing.T) {
 	}
 	if updated.message != "blocked by 1 undone parent" {
 		t.Fatalf("message = %q", updated.message)
+	}
+}
+
+func TestNodeDeleteConfirmationReturnsToNode(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("current", "Current"))
+	must(t, g.AddNodeWithID("child", "Child"))
+	must(t, g.AddEdge("current", "child"))
+	m := newTestModel(t, g)
+	m.mode = modeNode
+	m.current = "current"
+
+	next, _ := m.Update(runeKey('d'))
+	confirming := next.(Model)
+	if confirming.mode != modeConfirmDelete {
+		t.Fatalf("mode = %v", confirming.mode)
+	}
+	if confirming.previous != modeNode {
+		t.Fatalf("previous = %v", confirming.previous)
+	}
+
+	next, _ = confirming.Update(runeKey('n'))
+	cancelled := next.(Model)
+	if cancelled.mode != modeNode {
+		t.Fatalf("mode after cancel = %v", cancelled.mode)
+	}
+
+	next, _ = cancelled.Update(runeKey('d'))
+	confirming = next.(Model)
+	next, _ = confirming.Update(runeKey('y'))
+	updated := next.(Model)
+	if updated.mode != modeNode {
+		t.Fatalf("mode after delete = %v", updated.mode)
+	}
+	if updated.g.HasNode("current") {
+		t.Fatal("current node was not deleted")
 	}
 }
 
@@ -1159,6 +1309,75 @@ func TestLeavesCanOpenReadyViewWithR(t *testing.T) {
 
 	if updated.mode != modeReady {
 		t.Fatalf("mode = %v", updated.mode)
+	}
+}
+
+func TestLeavesWindowsItemsToTerminalHeight(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	for i := 1; i <= 20; i++ {
+		id := graph.NodeID(fmt.Sprintf("leaf-%02d", i))
+		text := fmt.Sprintf("Leaf item %02d", i)
+		must(t, g.AddNodeWithID(id, text))
+		must(t, g.AddEdge("root-node", id))
+	}
+	m := newTestModel(t, g)
+	m.mode = modeLeaves
+	m.height = 10
+	m.width = 48
+
+	view := m.viewLeaves()
+	if !strings.Contains(view, "Leaves 1-3 of 20") {
+		t.Fatalf("expected initial leaves window:\n%s", view)
+	}
+	if strings.Contains(view, "Leaf item 04") {
+		t.Fatalf("rendered beyond visible leaves window:\n%s", view)
+	}
+	if lines := strings.Count(view, "\n") + 1; lines > m.height {
+		t.Fatalf("view has %d lines, height %d:\n%s", lines, m.height, view)
+	}
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	paged := next.(Model)
+	if paged.leavesCursor != 6 {
+		t.Fatalf("leavesCursor after PgDown = %d", paged.leavesCursor)
+	}
+
+	paged.leavesCursor = 12
+	view = paged.viewLeaves()
+	if !strings.Contains(view, "Leaves 12-14 of 20") {
+		t.Fatalf("expected centered leaves window:\n%s", view)
+	}
+	if !strings.Contains(view, "Leaf item 13") {
+		t.Fatalf("selected leaf not visible:\n%s", view)
+	}
+}
+
+func TestLeavesWrapsItemsWithContinuationIndent(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	must(t, g.AddNodeWithID("long-leaf", "This leaf item has enough words to wrap onto another line cleanly"))
+	must(t, g.AddEdge("root-node", "long-leaf"))
+	m := newTestModel(t, g)
+	m.mode = modeLeaves
+	m.height = 14
+	m.width = 36
+
+	view := m.viewLeaves()
+	for _, want := range []string{
+		"This leaf item has enough words",
+		"\n    to wrap onto another line",
+		"\n    cleanly",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("missing wrapped text %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "This leaf item has enough words...") {
+		t.Fatalf("leaf item was truncated:\n%s", view)
+	}
+	if lines := strings.Count(view, "\n") + 1; lines > m.height {
+		t.Fatalf("view has %d lines, height %d:\n%s", lines, m.height, view)
 	}
 }
 

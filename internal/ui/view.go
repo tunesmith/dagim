@@ -221,78 +221,72 @@ func (m Model) viewSearch() string {
 }
 
 func (m Model) viewReady() string {
-	ready := m.g.Ready()
+	items := m.readyItems()
+	cursor := clampedCursor(m.readyCursor, len(items))
+	footer := m.readyFooter()
+	rendered := make([]string, len(items))
+	for i, item := range items {
+		node, _ := m.g.Node(item.id)
+		rendered[i] = m.renderSelectableNode(i == cursor, node)
+	}
+	start, end := lineWindowForRendered(rendered, cursor, m.listItemLimitForFooter(footer))
+	title := "Ready"
+	if m.showCompleted {
+		title = "Ready + Completed"
+	}
+	title = listTitle(title, start, end, len(items))
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Ready"))
+	b.WriteString(titleStyle.Render(title))
 	b.WriteByte('\n')
 	b.WriteString(m.rule())
 	b.WriteByte('\n')
-	index := 0
-	if len(ready) == 0 {
+	if len(items) == 0 {
 		if len(m.g.Nodes()) > 0 && m.g.CompleteCount() == len(m.g.Nodes()) {
 			b.WriteString(mutedStyle.Render("  all complete"))
 		} else {
 			b.WriteString(mutedStyle.Render("  none ready"))
 		}
 	} else {
-		for _, id := range ready {
-			node, _ := m.g.Node(id)
-			b.WriteString(m.renderSelectableNode(index == m.readyCursor, node))
+		for i := start; i < end; i++ {
+			b.WriteString(rendered[i])
 			b.WriteByte('\n')
-			index++
 		}
 	}
-	if m.showCompleted {
-		completed := m.g.Completed()
-		b.WriteString("\n\n")
-		b.WriteString(titleStyle.Render("Completed"))
+	if len(items) == 0 {
 		b.WriteByte('\n')
-		b.WriteString(m.rule())
-		b.WriteByte('\n')
-		if len(completed) == 0 {
-			b.WriteString(mutedStyle.Render("  none complete"))
-		} else {
-			for _, id := range completed {
-				node, _ := m.g.Node(id)
-				b.WriteString(m.renderSelectableNode(index == m.readyCursor, node))
-				b.WriteByte('\n')
-				index++
-			}
-		}
 	}
-	b.WriteString("\n")
-	b.WriteString(m.renderCommandGrid([][]string{
-		{"a add node", "Enter focus", "Space done/undone", "/ search"},
-		{"i inspect", "v completed", "o order", "l leaves"},
-		{"R reset", "W rewrite", "J/K reorder", "C check"},
-		{"q quit", "? help"},
-	}))
+	b.WriteString(footer)
 	return b.String()
 }
 
 func (m Model) viewLeaves() string {
 	leaves := m.visibleLeaves()
+	cursor := clampedCursor(m.leavesCursor, len(leaves))
+	footer := m.leavesFooter()
+	rendered := make([]string, len(leaves))
+	for i, id := range leaves {
+		node, _ := m.g.Node(id)
+		rendered[i] = m.renderSelectableNode(i == cursor, node)
+	}
+	start, end := lineWindowForRendered(rendered, cursor, m.listItemLimitForFooter(footer))
+	title := listTitle("Leaves", start, end, len(leaves))
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Leaves"))
+	b.WriteString(titleStyle.Render(title))
 	b.WriteByte('\n')
 	b.WriteString(m.rule())
 	b.WriteByte('\n')
 	if len(leaves) == 0 {
 		b.WriteString(mutedStyle.Render("  no leaves"))
 	} else {
-		for i, id := range leaves {
-			node, _ := m.g.Node(id)
-			b.WriteString(m.renderSelectableNode(i == m.leavesCursor, node))
+		for i := start; i < end; i++ {
+			b.WriteString(rendered[i])
 			b.WriteByte('\n')
 		}
 	}
-	b.WriteString("\n")
-	b.WriteString(m.renderCommandGrid([][]string{
-		{"Enter focus", "Space done/undone", "i inspect", "/ search"},
-		{"r ready", "v completed", "o order", "J/K reorder"},
-		{"R reset", "W rewrite", "C check", "q quit"},
-		{"Esc back", "? help"},
-	}))
+	if len(leaves) == 0 {
+		b.WriteByte('\n')
+	}
+	b.WriteString(footer)
 	return b.String()
 }
 
@@ -532,6 +526,24 @@ func (m Model) renderCommandGrid(rows [][]string) string {
 	return renderCommandGrid(rows, m.contentWidth())
 }
 
+func (m Model) readyFooter() string {
+	return m.renderCommandGrid([][]string{
+		{"j/k move", "PgUp/PgDn page", "Enter focus", "Space done"},
+		{"d delete", "/ search", "v completed", "l leaves"},
+		{"o order", "R reset", "W rewrite", "C check"},
+		{"q quit", "? help"},
+	})
+}
+
+func (m Model) leavesFooter() string {
+	return m.renderCommandGrid([][]string{
+		{"j/k move", "PgUp/PgDn page", "Enter focus", "Space done"},
+		{"r ready", "/ search", "v completed", "o order"},
+		{"J/K reorder", "R reset", "W rewrite", "C check"},
+		{"q quit", "Esc back", "? help"},
+	})
+}
+
 func renderCommandGrid(rows [][]string, width int) string {
 	const gap = 4
 	var cells []string
@@ -550,9 +562,6 @@ func renderCommandGrid(rows [][]string, width int) string {
 	}
 	columns := commandGridColumns(cells, maxColumns, width, gap)
 	widths := commandGridColumnWidths(cells, columns)
-	if columns == 1 && widths[0] > width {
-		widths[0] = width
-	}
 	var b strings.Builder
 	for start := 0; start < len(cells); start += columns {
 		var line strings.Builder
@@ -565,7 +574,7 @@ func renderCommandGrid(rows [][]string, width int) string {
 			if column > 0 {
 				line.WriteString(strings.Repeat(" ", gap))
 			}
-			cell := truncateText(cells[i], widths[column])
+			cell := cells[i]
 			if i < end-1 {
 				line.WriteString(fmt.Sprintf("%-*s", widths[column], cell))
 			} else {
@@ -791,6 +800,76 @@ func clampInt(value, min, max int) int {
 		return max
 	}
 	return value
+}
+
+func clampedCursor(cursor, total int) int {
+	if total <= 0 {
+		return 0
+	}
+	return clampInt(cursor, 0, total-1)
+}
+
+func listTitle(base string, start, end, total int) string {
+	if total > end-start {
+		return fmt.Sprintf("%s %d-%d of %d", base, start+1, end, total)
+	}
+	return base
+}
+
+func (m Model) listItemLimitForFooter(footer string) int {
+	if m.height <= 0 {
+		return m.listItemLimit()
+	}
+	limit := m.height - 2 - lineCount(footer) // title and rule
+	if limit < 1 {
+		return 1
+	}
+	return limit
+}
+
+func lineWindowForRendered(rendered []string, cursor, limit int) (int, int) {
+	heights := make([]int, len(rendered))
+	for i, text := range rendered {
+		heights[i] = lineCount(text)
+	}
+	return lineWindowAroundCursor(heights, cursor, limit)
+}
+
+func lineWindowAroundCursor(heights []int, cursor, limit int) (int, int) {
+	total := len(heights)
+	if total == 0 {
+		return 0, 0
+	}
+	cursor = clampedCursor(cursor, total)
+	if limit < 1 {
+		limit = 1
+	}
+	start := cursor
+	end := cursor + 1
+	used := heights[cursor]
+	beforeTarget := limit / 2
+	beforeUsed := 0
+	for start > 0 && beforeUsed+heights[start-1] <= beforeTarget && used+heights[start-1] <= limit {
+		start--
+		beforeUsed += heights[start]
+		used += heights[start]
+	}
+	for end < total && used+heights[end] <= limit {
+		used += heights[end]
+		end++
+	}
+	for start > 0 && used+heights[start-1] <= limit {
+		start--
+		used += heights[start]
+	}
+	return start, end
+}
+
+func lineCount(text string) int {
+	if text == "" {
+		return 1
+	}
+	return strings.Count(text, "\n") + 1
 }
 
 func leftMarginForTerminal(width int) int {

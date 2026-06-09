@@ -131,13 +131,7 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		node, _ := m.g.Node(m.current)
 		return m.setPrompt(promptEdit, "Edit node", node.Text)
 	case "d":
-		parents, _ := m.g.ParentsOf(m.current)
-		children, _ := m.g.ChildrenOf(m.current)
-		if len(parents)+len(children) > 0 {
-			m.mode = modeConfirmDelete
-			return m, nil
-		}
-		m = m.deleteCurrent()
+		m = m.startDelete(m.current, modeNode)
 	case "/":
 		return m.setSearch()
 	case "r":
@@ -314,13 +308,17 @@ func (m Model) updateReady(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "a":
 		return m.setPrompt(promptAddNode, "Add node", "")
 	case "j", "down":
-		if m.readyCursor < len(items)-1 {
-			m.readyCursor++
-		}
+		m.readyCursor = moveListCursor(m.readyCursor, len(items), 1)
 	case "k", "up":
-		if m.readyCursor > 0 {
-			m.readyCursor--
-		}
+		m.readyCursor = moveListCursor(m.readyCursor, len(items), -1)
+	case "pgdown":
+		m.readyCursor = moveListCursor(m.readyCursor, len(items), m.listPageSize())
+	case "pgup":
+		m.readyCursor = moveListCursor(m.readyCursor, len(items), -m.listPageSize())
+	case "home":
+		m.readyCursor = moveListCursor(0, len(items), 0)
+	case "end":
+		m.readyCursor = moveListCursor(len(items)-1, len(items), 0)
 	case "enter":
 		if len(items) > 0 {
 			if m.readyCursor >= len(items) {
@@ -348,6 +346,13 @@ func (m Model) updateReady(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.inspectID = items[m.readyCursor].id
 			m.previous = modeReady
 			m.mode = modeInspect
+		}
+	case "d":
+		if len(items) > 0 {
+			if m.readyCursor >= len(items) {
+				m.readyCursor = len(items) - 1
+			}
+			m = m.startDelete(items[m.readyCursor].id, modeReady)
 		}
 	case "C":
 		m.previous = modeReady
@@ -399,13 +404,17 @@ func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.mode = m.leavesReturn
 	case "j", "down":
-		if m.leavesCursor < len(leaves)-1 {
-			m.leavesCursor++
-		}
+		m.leavesCursor = moveListCursor(m.leavesCursor, len(leaves), 1)
 	case "k", "up":
-		if m.leavesCursor > 0 {
-			m.leavesCursor--
-		}
+		m.leavesCursor = moveListCursor(m.leavesCursor, len(leaves), -1)
+	case "pgdown":
+		m.leavesCursor = moveListCursor(m.leavesCursor, len(leaves), m.listPageSize())
+	case "pgup":
+		m.leavesCursor = moveListCursor(m.leavesCursor, len(leaves), -m.listPageSize())
+	case "home":
+		m.leavesCursor = moveListCursor(0, len(leaves), 0)
+	case "end":
+		m.leavesCursor = moveListCursor(len(leaves)-1, len(leaves), 0)
 	case "enter":
 		if len(leaves) > 0 {
 			if m.leavesCursor >= len(leaves) {
@@ -579,10 +588,11 @@ func (m Model) selectedNodeOrCurrent(items []relationItem) graph.NodeID {
 func (m Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y", "Y":
+		returnMode := m.previous
 		m = m.deleteCurrent()
-		m.mode = modeNode
+		m.mode = m.modeAfterDelete(returnMode)
 	case "n", "N", "esc":
-		m.mode = modeNode
+		m.mode = m.previous
 	}
 	return m, nil
 }
@@ -652,4 +662,29 @@ func (m Model) deleteCurrent() Model {
 	m.current = order[index]
 	m.cursor = 0
 	return m.markChanged()
+}
+
+func (m Model) startDelete(id graph.NodeID, returnMode mode) Model {
+	if id == "" || !m.g.HasNode(id) {
+		return m
+	}
+	m.current = id
+	m.cursor = 0
+	m.previous = returnMode
+	parents, _ := m.g.ParentsOf(id)
+	children, _ := m.g.ChildrenOf(id)
+	if len(parents)+len(children) > 0 {
+		m.mode = modeConfirmDelete
+		return m
+	}
+	m = m.deleteCurrent()
+	m.mode = m.modeAfterDelete(returnMode)
+	return m
+}
+
+func (m Model) modeAfterDelete(returnMode mode) mode {
+	if len(m.g.Nodes()) == 0 {
+		return modeNode
+	}
+	return returnMode
 }
