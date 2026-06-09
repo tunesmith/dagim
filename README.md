@@ -2,6 +2,8 @@
 
 dagim is a text-based editor for simple directed acyclic graphs.
 
+![dagim demo](docs/demo.gif)
+
 *Motive:* People often think in graphs without realizing it, but 
 graph tools are complicated. It's often easier to just write a 
 bullet list outline even if the ideas we're processing aren't 
