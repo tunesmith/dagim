@@ -364,6 +364,33 @@ func TestNodeCanOpenReadyViewWithR(t *testing.T) {
 	}
 }
 
+func TestNodeCanReturnToReadyWithoutLosingReadyCursor(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("first-root", "First root"))
+	must(t, g.AddNodeWithID("second-root", "Second root"))
+	must(t, g.AddNodeWithID("third-root", "Third root"))
+	m := newTestModel(t, g)
+	m.readyCursor = 1
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	focused := next.(Model)
+	if focused.mode != modeNode {
+		t.Fatalf("mode after enter = %v", focused.mode)
+	}
+	if focused.current != "second-root" {
+		t.Fatalf("current after enter = %q", focused.current)
+	}
+
+	next, _ = focused.Update(runeKey('r'))
+	updated := next.(Model)
+	if updated.mode != modeReady {
+		t.Fatalf("mode after r = %v", updated.mode)
+	}
+	if updated.readyCursor != 1 {
+		t.Fatalf("readyCursor after r = %d", updated.readyCursor)
+	}
+}
+
 func TestNodeReordersSelectedChildWithinChildren(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("current", "Current"))

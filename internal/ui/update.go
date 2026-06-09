@@ -136,7 +136,6 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.setSearch()
 	case "r":
 		m.mode = modeReady
-		m.readyCursor = 0
 	case "l":
 		m.previous = modeNode
 		m.leavesReturn = modeNode
@@ -451,7 +450,6 @@ func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.setSearch()
 	case "r":
 		m.mode = modeReady
-		m.readyCursor = 0
 	case "o":
 		m.order = graph.NewOrder(m.g)
 		m.previous = modeLeaves
