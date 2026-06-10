@@ -1,0 +1,15 @@
+name: Feature request
+description: Suggest a focused improvement.
+title: "Feature: "
+body:
+  - type: markdown
+    attributes:
+      value: Please keep feature requests focused on one behavior or workflow.
+
+  - type: textarea
+    id: request
+    attributes:
+      label: Feature request
+      description: What would you like dagim to support or do differently?
+    validations:
+      required: true

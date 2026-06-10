@@ -1,0 +1,47 @@
+name: Bug report
+description: Report something broken or surprising.
+title: "Bug: "
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to report a bug.
+
+  - type: input
+    id: version
+    attributes:
+      label: dagim version
+      description: Output of `dagim --version`, or the commit if built from source.
+      placeholder: dagim dev
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system and terminal emulator.
+      placeholder: macOS 15, Terminal.app
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include a small `.dagim` file when it helps.
+      placeholder: |
+        1. Run `dagim example.dagim`
+        2. Press ...
+        3. See ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
