@@ -511,8 +511,8 @@ Children
 Commands
 ────────────────────────────────────────
 a add node    p add parent    c add child    x unlink selected
-i inspect     e edit          d delete node  / search
-r ready       l leaves        o order        C check
+e edit        d delete node   / search       r ready
+l leaves      o order         C check        u undo
 Space done/undone  v completed  R reset  W rewrite
 J/K reorder   q quit          ? help
 ```
@@ -530,14 +530,13 @@ The user should be able to:
 7. Add/link an existing or new child.
 8. Unlink an existing parent or child.
 9. Search all nodes by text.
-10. Inspect a node to see details such as its ID.
-11. Autosave successful edits immediately.
-12. View ready nodes and leaves.
-13. Mark nodes complete or incomplete.
-14. Show or hide completed nodes.
-15. Open a check/diagnostics view.
+10. Autosave successful edits immediately.
+11. View ready nodes and leaves.
+12. Mark nodes complete or incomplete.
+13. Show or hide completed nodes.
+14. Open a check/diagnostics view.
 
-Normal node, ready, leaves, search, and order lists should show node text without inline IDs. Long node text should wrap to the terminal width. Node IDs should be available through inspect views, not through the main scanning surfaces.
+Normal node, ready, leaves, search, and order lists should show node text without inline IDs. Long node text should wrap to the terminal width. Node IDs are visible in the `.dagim` source file and in rewrite/check diagnostics when ID changes matter; they are not part of the main scanning surfaces.
 
 Wrapped rows in selectable node lists should use a hanging indent on continuation lines so one long node does not visually read as multiple nodes.
 
@@ -561,7 +560,6 @@ a             add node
 p             add/link parent to current node
 c             add/link child to current node
 x             unlink selected relationship
-i             inspect selected node, or current node if no relationship is selected
 e             edit current node text
 d             delete current node, with confirmation if it has edges
 r             show ready view
@@ -727,8 +725,7 @@ Rules:
 8. `v` toggles visibility of completed nodes for review.
 9. `R` asks for confirmation and clears all completion state.
 10. Search/filter may be available.
-11. Inspect should expose IDs without showing IDs inline in the ready list.
-12. `J/K` reorders the highlighted ready row within the ready section. When completed nodes are visible, `J/K` also reorders highlighted completed rows within the completed section.
+11. `J/K` reorders the highlighted ready row within the ready section. When completed nodes are visible, `J/K` also reorders highlighted completed rows within the completed section.
 
 Ready is a property of current completion state plus graph structure. True roots are still graph-theoretic nodes with no parents, but roots are not the primary workflow view in version 1.
 
@@ -754,9 +751,8 @@ Rules:
 3. Enter focuses a selected node.
 4. `r` switches to ready view.
 5. Search/filter may be available.
-6. Inspect should expose IDs without showing IDs inline in the leaves list.
-7. `J/K` reorders the highlighted visible leaf.
-8. Esc returns to the view that opened leaves.
+6. `J/K` reorders the highlighted visible leaf.
+7. Esc returns to the view that opened leaves.
 
 Leaves are a property of the graph. A node is a leaf only because it currently has no children; it is not a distinct node type.
 
@@ -826,11 +822,11 @@ Available now
 
 Commands
 ────────────────────────────────────────
-Space pick    Enter inspect    u undo    r reset
-e export      Esc/q exit
+j/k move      Space pick       u undo    r reset
+e export      C check          Esc/q exit
 ```
 
-The mode does not need to display “still blocked” by default. That can make the interface heavier and more like an analysis dashboard. Users should be able to inspect available nodes and temporarily drill into their parent/child neighborhoods if needed.
+The mode does not need to display “still blocked” by default. That can make the interface heavier and more like an analysis dashboard.
 
 Optional later enhancement:
 
@@ -846,27 +842,7 @@ Available nodes are displayed in file order by default.
 
 This display order is non-semantic. It does not mean the graph says one available node comes before another.
 
-### 17.5 Inspecting During Order
-
-In order remaining mode:
-
-```text
-Enter
-```
-
-on an available node should inspect or focus that node without picking it.
-
-A lightweight inspect view should show:
-
-```text
-Node text
-Parents
-Children
-```
-
-Returning from inspect mode should return to the same order state.
-
-### 17.6 Picking
+### 17.5 Picking
 
 Picking an available node adds it to the output order and temporarily treats it as processed.
 
@@ -876,7 +852,7 @@ Suggested key:
 Space
 ```
 
-### 17.7 Undo
+### 17.6 Undo
 
 Ordering is exploratory, so undo should be part of version 1.
 
@@ -887,13 +863,13 @@ Rules:
 3. Available nodes are recomputed.
 4. Multiple undo operations are allowed.
 
-### 17.8 Reset
+### 17.7 Reset
 
 Reset clears the temporary order state.
 
 The graph itself is not changed.
 
-### 17.9 Completion
+### 17.8 Completion
 
 When all remaining incomplete nodes have been picked, show the completed order.
 
@@ -912,7 +888,7 @@ Commands
 e export    u undo    r reset    Esc/q exit
 ```
 
-### 17.10 Exporting the Order
+### 17.9 Exporting the Order
 
 Version 1 should support a simple export of the current order.
 

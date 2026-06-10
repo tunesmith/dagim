@@ -23,7 +23,6 @@ const (
 	modeReady
 	modeLeaves
 	modeOrder
-	modeInspect
 	modeCheck
 	modeConfirmDelete
 	modeConfirmRewrite
@@ -85,7 +84,6 @@ type Model struct {
 
 	order         *graph.Order
 	orderReturn   mode
-	inspectID     graph.NodeID
 	readyCursor   int
 	leavesCursor  int
 	leavesReturn  mode

@@ -130,19 +130,6 @@ func TestViewFitsTerminalDimensions(t *testing.T) {
 	assertViewFits(t, scrolled.View(), scrolled.width, scrolled.height)
 }
 
-func TestInspectShowsIDs(t *testing.T) {
-	g := graph.New()
-	must(t, g.AddNodeWithID("current-node-id", "Current node"))
-	m := newTestModel(t, g)
-	m.inspectID = "current-node-id"
-	m.mode = modeInspect
-	view := m.View()
-
-	if !strings.Contains(view, "current-node-id") {
-		t.Fatalf("inspect should expose ID:\n%s", view)
-	}
-}
-
 func assertViewFits(t *testing.T, view string, width, height int) {
 	t.Helper()
 	lines := strings.Split(view, "\n")
@@ -156,20 +143,6 @@ func assertViewFits(t *testing.T, view string, width, height int) {
 		if got := lipgloss.Width(line); got > width {
 			t.Fatalf("line width = %d, want <= %d:\n%s", got, width, view)
 		}
-	}
-}
-
-func TestInspectReturnsToPreviousMode(t *testing.T) {
-	g := graph.New()
-	must(t, g.AddNodeWithID("current-node-id", "Current node"))
-	m := newTestModel(t, g)
-	m.mode = modeInspect
-	m.previous = modeNode
-
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	updated := next.(Model)
-	if updated.mode != modeNode {
-		t.Fatalf("mode = %v", updated.mode)
 	}
 }
 
@@ -496,8 +469,8 @@ func TestNodeReorderDoesNothingWithoutVisibleRelation(t *testing.T) {
 func TestCommandGridReflowsToFitWidth(t *testing.T) {
 	rows := [][]string{
 		{"a add node", "p add parent", "c add child", "x unlink selected"},
-		{"i inspect", "e edit", "d delete node", "/ search"},
-		{"r ready", "l leaves", "o order", "C check"},
+		{"e edit", "d delete node", "/ search", "r ready"},
+		{"l leaves", "o order", "C check", "u undo"},
 		{"Space done/undone", "v completed", "R reset", "W rewrite"},
 		{"J/K reorder", "q quit", "? help"},
 	}
@@ -1085,32 +1058,6 @@ func TestOrderEscReturnsToLaunchingMode(t *testing.T) {
 	}
 }
 
-func TestOrderInspectDoesNotLoseReadyReturnMode(t *testing.T) {
-	g := graph.New()
-	must(t, g.AddNodeWithID("root-node", "Root node"))
-	m := newTestModel(t, g)
-
-	next, _ := m.Update(runeKey('o'))
-	ordering := next.(Model)
-	next, _ = ordering.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	inspecting := next.(Model)
-	if inspecting.mode != modeInspect {
-		t.Fatalf("mode = %v", inspecting.mode)
-	}
-
-	next, _ = inspecting.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	ordering = next.(Model)
-	if ordering.mode != modeOrder {
-		t.Fatalf("mode = %v", ordering.mode)
-	}
-
-	next, _ = ordering.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	updated := next.(Model)
-	if updated.mode != modeReady {
-		t.Fatalf("mode = %v", updated.mode)
-	}
-}
-
 func TestOrderQReturnsToLaunchingMode(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("root-node", "Root node"))
@@ -1431,36 +1378,6 @@ func TestLeavesEscReturnsToLaunchingMode(t *testing.T) {
 	}
 	if updated.current != "root-node" {
 		t.Fatalf("current = %q", updated.current)
-	}
-}
-
-func TestLeavesInspectDoesNotLoseLaunchingMode(t *testing.T) {
-	g := graph.New()
-	must(t, g.AddNodeWithID("root-node", "Root node"))
-	must(t, g.AddNodeWithID("leaf-node", "Leaf node"))
-	must(t, g.AddEdge("root-node", "leaf-node"))
-	m := newTestModel(t, g)
-	m.mode = modeNode
-	m.current = "root-node"
-
-	next, _ := m.Update(runeKey('l'))
-	leaves := next.(Model)
-	next, _ = leaves.Update(runeKey('i'))
-	inspecting := next.(Model)
-	if inspecting.mode != modeInspect {
-		t.Fatalf("mode = %v", inspecting.mode)
-	}
-
-	next, _ = inspecting.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	leaves = next.(Model)
-	if leaves.mode != modeLeaves {
-		t.Fatalf("mode = %v", leaves.mode)
-	}
-
-	next, _ = leaves.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	updated := next.(Model)
-	if updated.mode != modeNode {
-		t.Fatalf("mode = %v", updated.mode)
 	}
 }
 

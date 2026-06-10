@@ -61,8 +61,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return updateWithViewScrollReset(oldMode, m.updateLeaves, msg)
 		case modeOrder:
 			return updateWithViewScrollReset(oldMode, m.updateOrder, msg)
-		case modeInspect:
-			return updateWithViewScrollReset(oldMode, m.updateInspect, msg)
 		case modeCheck:
 			return updateWithViewScrollReset(oldMode, m.updateCheck, msg)
 		case modeConfirmDelete:
@@ -136,10 +134,6 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.current = items[m.cursor].id
 			m.cursor = 0
 		}
-	case "i":
-		m.inspectID = m.selectedNodeOrCurrent(items)
-		m.previous = modeNode
-		m.mode = modeInspect
 	case "C":
 		m.previous = modeNode
 		m.checkScroll = 0
@@ -388,15 +382,6 @@ func (m Model) updateReady(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.readyCursor--
 			}
 		}
-	case "i":
-		if len(items) > 0 {
-			if m.readyCursor >= len(items) {
-				m.readyCursor = len(items) - 1
-			}
-			m.inspectID = items[m.readyCursor].id
-			m.previous = modeReady
-			m.mode = modeInspect
-		}
 	case "d":
 		if len(items) > 0 {
 			if m.readyCursor >= len(items) {
@@ -487,15 +472,6 @@ func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.leavesCursor--
 			}
 		}
-	case "i":
-		if len(leaves) > 0 {
-			if m.leavesCursor >= len(leaves) {
-				m.leavesCursor = len(leaves) - 1
-			}
-			m.inspectID = leaves[m.leavesCursor]
-			m.previous = modeLeaves
-			m.mode = modeInspect
-		}
 	case "C":
 		m.previous = modeLeaves
 		m.checkScroll = 0
@@ -565,15 +541,6 @@ func (m Model) updateOrder(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.cursor--
 			}
 		}
-	case "enter":
-		if len(available) > 0 {
-			if m.cursor >= len(available) {
-				m.cursor = len(available) - 1
-			}
-			m.inspectID = available[m.cursor]
-			m.previous = modeOrder
-			m.mode = modeInspect
-		}
 	case "C":
 		m.previous = modeOrder
 		m.checkScroll = 0
@@ -587,14 +554,6 @@ func (m Model) updateOrder(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.cursor = 0
 	case "e":
 		return m.setPrompt(promptExportOrder, "Export order", defaultOrderPath(m.path))
-	}
-	return m, nil
-}
-
-func (m Model) updateInspect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc", "enter":
-		m.mode = m.previous
 	}
 	return m, nil
 }
@@ -628,13 +587,6 @@ func (m Model) updateCheck(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = m.previous
 	}
 	return m, nil
-}
-
-func (m Model) selectedNodeOrCurrent(items []relationItem) graph.NodeID {
-	if len(items) > 0 && m.cursor >= 0 && m.cursor < len(items) {
-		return items[m.cursor].id
-	}
-	return m.current
 }
 
 func (m Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

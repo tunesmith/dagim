@@ -50,8 +50,6 @@ func (m Model) viewBody() string {
 		body = m.viewLeaves()
 	case modeOrder:
 		body = m.viewOrder()
-	case modeInspect:
-		body = m.viewInspect()
 	case modeCheck:
 		body = m.viewCheck()
 	case modeConfirmDelete:
@@ -147,10 +145,10 @@ func (m Model) viewNode() string {
 	b.WriteByte('\n')
 	b.WriteString(m.renderCommandGrid([][]string{
 		{"a add node", "p add parent", "c add child", "x unlink selected"},
-		{"i inspect", "e edit", "d delete node", "/ search"},
-		{"r ready", "l leaves", "o order", "C check"},
+		{"e edit", "d delete node", "/ search", "r ready"},
+		{"l leaves", "o order", "C check", "u undo"},
 		{"Space done/undone", "v completed", "R reset", "W rewrite"},
-		{"J/K reorder", "u undo", "q quit", "? help"},
+		{"J/K reorder", "q quit", "? help"},
 	}))
 	return b.String()
 }
@@ -344,7 +342,7 @@ func (m Model) viewOrder() string {
 	}
 	b.WriteByte('\n')
 	b.WriteString(m.renderCommandGrid([][]string{
-		{"Space pick", "Enter inspect", "u undo", "r reset"},
+		{"j/k move", "Space pick", "u undo", "r reset"},
 		{"e export", "C check", "Esc/q exit"},
 	}))
 	return b.String()
@@ -424,32 +422,6 @@ func (m Model) checkBody() string {
 	return b.String()
 }
 
-func (m Model) viewInspect() string {
-	node, ok := m.g.Node(m.inspectID)
-	if !ok {
-		return "Node missing.\n\n" + commandStyle.Render("Esc back")
-	}
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("Inspect"))
-	b.WriteByte('\n')
-	b.WriteString(m.rule())
-	b.WriteByte('\n')
-	b.WriteString(m.renderWrapped("", node.Text, lipgloss.NewStyle()))
-	b.WriteByte('\n')
-	b.WriteString(mutedStyle.Render(string(node.ID)))
-	if node.Complete {
-		b.WriteByte('\n')
-		b.WriteString(mutedStyle.Render("complete"))
-	}
-	b.WriteString("\n\n")
-	b.WriteString(m.renderIDList("Parents", node.ID, m.g.ParentsOf))
-	b.WriteByte('\n')
-	b.WriteString(m.renderIDList("Children", node.ID, m.g.ChildrenOf))
-	b.WriteString("\n")
-	b.WriteString(commandStyle.Render("Esc back"))
-	return b.String()
-}
-
 func (m Model) viewConfirmDelete() string {
 	node, _ := m.g.Node(m.current)
 	return fmt.Sprintf("%s\n%s\nCurrent node:\n%s\n\nThis removes the node and all links to and from it.\n\n%s",
@@ -499,9 +471,9 @@ func (m Model) viewHelp() string {
 		"Non-empty files open to ready. Enter focuses a selected node.",
 		"",
 		"a add node        p add/link parent    c add/link child",
-		"x unlink selected i inspect            e edit",
-		"d delete node     / search             r ready",
-		"l leaves          o order remaining    J/K reorder",
+		"x unlink selected e edit              d delete node",
+		"/ search          r ready             l leaves",
+		"o order remaining J/K reorder",
 		"Space done/undone u undo              v completed",
 		"R reset done      W rewrite file       C check",
 		"q quit",
@@ -661,43 +633,12 @@ func (m Model) renderSelectableLine(selected bool, text string) string {
 	return prefix + style.Render(truncateText(text, width))
 }
 
-func renderIDListFor(g *graph.Graph, title string, id graph.NodeID, fn func(graph.NodeID) ([]graph.NodeID, error)) string {
-	ids, _ := fn(id)
-	var b strings.Builder
-	b.WriteString(titleStyle.Render(title))
-	b.WriteByte('\n')
-	b.WriteString(genericRule())
-	b.WriteByte('\n')
-	if len(ids) == 0 {
-		b.WriteString(mutedStyle.Render("  none"))
-		b.WriteByte('\n')
-		return b.String()
-	}
-	for _, id := range ids {
-		node, _ := g.Node(id)
-		b.WriteString("  ")
-		b.WriteString(node.Text)
-		b.WriteString(" ")
-		b.WriteString(mutedStyle.Render("[" + string(node.ID) + "]"))
-		b.WriteByte('\n')
-	}
-	return b.String()
-}
-
-func (m Model) renderIDList(title string, id graph.NodeID, fn func(graph.NodeID) ([]graph.NodeID, error)) string {
-	return renderIDListFor(m.g, title, id, fn)
-}
-
 func (m Model) rule() string {
 	return mutedStyle.Render(strings.Repeat("-", m.contentWidth()))
 }
 
 func (m Model) strongRule() string {
 	return selectStyle.Render(strings.Repeat("=", m.contentWidth()))
-}
-
-func genericRule() string {
-	return mutedStyle.Render(strings.Repeat("-", 42))
 }
 
 func (m Model) contentWidth() int {
