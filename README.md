@@ -32,6 +32,8 @@ already-created node.
 `dagim` prevents cycles by preventing you from adding upstream
 nodes as children, or downstream nodes as parents.
 
+An edge `A -> B` means `B` stays blocked until `A` is complete.
+
 You can also hit `Space` to "complete" a top-layer node, 
 which will refresh the top list to show the newly parentless
 nodes. This is a useful way to process your way through a 

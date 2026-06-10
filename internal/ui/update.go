@@ -14,8 +14,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.input.Width = inputWidth(msg.Width)
+		m.viewScroll = clampInt(m.viewScroll, 0, m.globalScrollMax())
 		return m, nil
 	case tea.KeyMsg:
+		oldMode := m.mode
 		m.message = ""
 		switch msg.String() {
 		case "ctrl+c":
@@ -23,39 +25,78 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+z":
 			return m, tea.Suspend
 		}
+		if m.usesGlobalViewport() {
+			maxScroll := m.globalScrollMax()
+			switch msg.String() {
+			case "pgdown":
+				m.viewScroll += m.globalScrollPageSize()
+				if m.viewScroll > maxScroll {
+					m.viewScroll = maxScroll
+				}
+				return m, nil
+			case "pgup":
+				m.viewScroll -= m.globalScrollPageSize()
+				if m.viewScroll < 0 {
+					m.viewScroll = 0
+				}
+				return m, nil
+			case "home":
+				m.viewScroll = 0
+				return m, nil
+			case "end":
+				m.viewScroll = maxScroll
+				return m, nil
+			}
+		}
 		switch m.mode {
 		case modeNode:
-			return m.updateNode(msg)
+			return updateWithViewScrollReset(oldMode, m.updateNode, msg)
 		case modePrompt:
-			return m.updatePrompt(msg)
+			return updateWithViewScrollReset(oldMode, m.updatePrompt, msg)
 		case modeSearch:
-			return m.updateSearch(msg)
+			return updateWithViewScrollReset(oldMode, m.updateSearch, msg)
 		case modeReady:
-			return m.updateReady(msg)
+			return updateWithViewScrollReset(oldMode, m.updateReady, msg)
 		case modeLeaves:
-			return m.updateLeaves(msg)
+			return updateWithViewScrollReset(oldMode, m.updateLeaves, msg)
 		case modeOrder:
-			return m.updateOrder(msg)
+			return updateWithViewScrollReset(oldMode, m.updateOrder, msg)
 		case modeInspect:
-			return m.updateInspect(msg)
+			return updateWithViewScrollReset(oldMode, m.updateInspect, msg)
 		case modeCheck:
-			return m.updateCheck(msg)
+			return updateWithViewScrollReset(oldMode, m.updateCheck, msg)
 		case modeConfirmDelete:
-			return m.updateConfirmDelete(msg)
+			return updateWithViewScrollReset(oldMode, m.updateConfirmDelete, msg)
 		case modeConfirmRewrite:
-			return m.updateConfirmRewrite(msg)
+			return updateWithViewScrollReset(oldMode, m.updateConfirmRewrite, msg)
 		case modeConfirmReset:
-			return m.updateConfirmReset(msg)
+			return updateWithViewScrollReset(oldMode, m.updateConfirmReset, msg)
 		case modeConfirmQuit:
-			return m.updateConfirmQuit(msg)
+			return updateWithViewScrollReset(oldMode, m.updateConfirmQuit, msg)
 		case modeHelp:
 			if msg.String() == "esc" || msg.String() == "q" || msg.String() == "?" {
 				m.mode = m.previous
 			}
-			return m, nil
+			return resetViewScrollOnModeChange(oldMode, m, nil)
 		}
 	}
 	return m, nil
+}
+
+func updateWithViewScrollReset(oldMode mode, update func(tea.KeyMsg) (tea.Model, tea.Cmd), msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	next, cmd := update(msg)
+	return resetViewScrollOnModeChange(oldMode, next, cmd)
+}
+
+func resetViewScrollOnModeChange(oldMode mode, next tea.Model, cmd tea.Cmd) (tea.Model, tea.Cmd) {
+	m, ok := next.(Model)
+	if !ok {
+		return next, cmd
+	}
+	if m.mode != oldMode {
+		m.viewScroll = 0
+	}
+	return m, cmd
 }
 
 func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

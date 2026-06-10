@@ -25,6 +25,17 @@ var (
 )
 
 func (m Model) View() string {
+	body := m.viewBody()
+	if m.message != "" {
+		body += "\n\n" + errorStyle.Render(m.message)
+	}
+	if m.usesGlobalViewport() {
+		body = m.renderGlobalViewport(body)
+	}
+	return m.fitToTerminal(m.padBlock(body))
+}
+
+func (m Model) viewBody() string {
 	var body string
 	switch m.mode {
 	case modeNode:
@@ -56,10 +67,7 @@ func (m Model) View() string {
 	default:
 		body = m.viewNode()
 	}
-	if m.message != "" {
-		body += "\n\n" + errorStyle.Render(m.message)
-	}
-	return m.padBlock(body)
+	return body
 }
 
 func (m Model) viewNode() string {
@@ -701,7 +709,7 @@ func contentWidthForTerminal(width int) int {
 	if width <= 0 {
 		width = 80
 	}
-	width -= margin + 2
+	width -= margin + 4
 	if width > maxContentWidth {
 		width = maxContentWidth
 	}
@@ -720,6 +728,74 @@ func (m Model) padBlock(text string) string {
 	lines := strings.Split(text, "\n")
 	for i := range lines {
 		lines[i] = pad + lines[i]
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m Model) usesGlobalViewport() bool {
+	switch m.mode {
+	case modeReady, modeLeaves, modeSearch, modePrompt, modeCheck:
+		return false
+	default:
+		return true
+	}
+}
+
+func (m Model) renderGlobalViewport(body string) string {
+	if m.height <= 0 {
+		return body
+	}
+	footer := ""
+	if m.globalScrollMaxFor(body) > 0 {
+		footer = "PgUp/PgDn scroll    Home/End"
+	}
+	return m.renderScrollable(body, m.viewScroll, footer)
+}
+
+func (m Model) globalScrollMax() int {
+	if !m.usesGlobalViewport() || m.height <= 0 {
+		return 0
+	}
+	body := m.viewBody()
+	if m.message != "" {
+		body += "\n\n" + errorStyle.Render(m.message)
+	}
+	return m.globalScrollMaxFor(body)
+}
+
+func (m Model) globalScrollMaxFor(body string) int {
+	if m.height <= 0 {
+		return 0
+	}
+	footer := ""
+	if scrollMaxForLines(strings.Split(body, "\n"), m.height) > 0 {
+		footer = "PgUp/PgDn scroll    Home/End"
+	}
+	return scrollMaxForLines(strings.Split(body, "\n"), m.scrollBodyHeight(footer))
+}
+
+func (m Model) globalScrollPageSize() int {
+	size := m.scrollBodyHeight("PgUp/PgDn scroll    Home/End") - 1
+	if size < 1 {
+		return 1
+	}
+	return size
+}
+
+func (m Model) fitToTerminal(text string) string {
+	lines := strings.Split(text, "\n")
+	if m.width > 0 {
+		width := m.width - 1
+		if width < 1 {
+			width = 1
+		}
+		style := lipgloss.NewStyle().MaxWidth(width)
+		for i := range lines {
+			lines[i] = style.Render(lines[i])
+		}
+	}
+	if m.height > 0 && len(lines) > m.height {
+		lines = lines[:m.height]
 	}
 	return strings.Join(lines, "\n")
 }

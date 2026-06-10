@@ -545,6 +545,8 @@ On wide terminals, the TUI should remain left-anchored with a modest gutter and 
 
 Command panels should render as aligned grids rather than hand-spaced prose rows. They should reflow to fewer columns on narrow terminals so command labels do not extend off-screen.
 
+Every rendered view should respect the terminal's reported width and height. Views with lists should window their list content around the selected item; free-form views should provide in-app scrolling instead of relying on terminal scrollback or allowing content to run off-screen.
+
 ### 11.2 Suggested Keybindings
 
 These are proposed defaults, not sacred API.

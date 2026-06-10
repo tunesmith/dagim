@@ -100,6 +100,36 @@ func TestWideViewCapsRulesAndAddsGutter(t *testing.T) {
 	}
 }
 
+func TestViewFitsTerminalDimensions(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("current", "Current"))
+	for i := 1; i <= 20; i++ {
+		id := graph.NodeID(fmt.Sprintf("child-%02d", i))
+		text := fmt.Sprintf("Child item %02d with enough words to wrap in the viewport", i)
+		must(t, g.AddNodeWithID(id, text))
+		must(t, g.AddEdge("current", id))
+	}
+
+	m := newTestModel(t, g)
+	m.mode = modeNode
+	m.current = "current"
+	m.height = 12
+	m.width = 44
+
+	view := m.View()
+	assertViewFits(t, view, m.width, m.height)
+	if !strings.Contains(view, "PgUp/PgDn scroll") {
+		t.Fatalf("overflowing free-form view should show scroll controls:\n%s", view)
+	}
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	scrolled := next.(Model)
+	if scrolled.viewScroll == 0 {
+		t.Fatal("expected global viewport to scroll")
+	}
+	assertViewFits(t, scrolled.View(), scrolled.width, scrolled.height)
+}
+
 func TestInspectShowsIDs(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("current-node-id", "Current node"))
@@ -110,6 +140,22 @@ func TestInspectShowsIDs(t *testing.T) {
 
 	if !strings.Contains(view, "current-node-id") {
 		t.Fatalf("inspect should expose ID:\n%s", view)
+	}
+}
+
+func assertViewFits(t *testing.T, view string, width, height int) {
+	t.Helper()
+	lines := strings.Split(view, "\n")
+	if height > 0 && len(lines) > height {
+		t.Fatalf("view has %d lines, height %d:\n%s", len(lines), height, view)
+	}
+	if width <= 0 {
+		return
+	}
+	for _, line := range lines {
+		if got := lipgloss.Width(line); got > width {
+			t.Fatalf("line width = %d, want <= %d:\n%s", got, width, view)
+		}
 	}
 }
 
@@ -678,9 +724,9 @@ func TestReadyWrapsItemsWithContinuationIndent(t *testing.T) {
 
 	view := m.viewReady()
 	for _, want := range []string{
-		"This ready item has enough words",
-		"\n    to wrap onto another line",
-		"\n    cleanly",
+		"This ready item has enough",
+		"\n    words to wrap onto another",
+		"\n    line cleanly",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("missing wrapped text %q:\n%s", want, view)
@@ -1392,9 +1438,9 @@ func TestLeavesWrapsItemsWithContinuationIndent(t *testing.T) {
 
 	view := m.viewLeaves()
 	for _, want := range []string{
-		"This leaf item has enough words",
-		"\n    to wrap onto another line",
-		"\n    cleanly",
+		"This leaf item has enough",
+		"\n    words to wrap onto another",
+		"\n    line cleanly",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("missing wrapped text %q:\n%s", want, view)

@@ -74,6 +74,7 @@ type Model struct {
 	leavesReturn  mode
 	searchCursor  int
 	checkScroll   int
+	viewScroll    int
 	showCompleted bool
 
 	dirty   bool
