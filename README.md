@@ -109,4 +109,4 @@ Experimental and actively dogfooded. File format and UI details may still change
 
 ## License
 
-License TBD. This repository is public source (all rights reserved) for now, but no open-source license has been selected yet.
+dagim is licensed under the GNU General Public License v3.0 or later. See [LICENSE](LICENSE).
