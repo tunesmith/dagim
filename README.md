@@ -121,8 +121,9 @@ A play on vim: "dag improved", as in a small text tool for DAGs.
 
 ## Status
 
-Pre-1.0 and actively dogfooded. File format and UI details may still change
-before the first stable release.
+Actively maintained and dogfooded. The `.dagim` file format is versioned
+(`# dagim v1`); compatibility should be preserved for v1 files unless a future
+format version is introduced.
 
 ## License
 
