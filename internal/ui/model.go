@@ -251,14 +251,6 @@ func (m Model) searchResultWindow(total int) (int, int) {
 	return windowAroundCursor(total, m.searchCursor, m.searchResultLimit())
 }
 
-func (m Model) readyItemWindow(total int) (int, int) {
-	return windowAroundCursor(total, m.readyCursor, m.listItemLimit())
-}
-
-func (m Model) leavesWindow(total int) (int, int) {
-	return windowAroundCursor(total, m.leavesCursor, m.listItemLimit())
-}
-
 func windowAroundCursor(total, cursor, limit int) (int, int) {
 	if total <= 0 {
 		return 0, 0

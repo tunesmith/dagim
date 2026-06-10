@@ -1405,55 +1405,7 @@ The user can export the current or completed order as one node per line.
 10. Undo recomputes available nodes.
 11. Reset clears temporary order state but does not clear graph completion.
 
-## 27. Future Ideas
-
-These are intentionally out of scope for version 1.
-
-See `dagim_future_ideas.md` for the active backlog of deferred ideas.
-
-1. DOT/Graphviz export.
-2. SVG or PNG graph rendering.
-3. Edge labels.
-4. Multiple named relationship types.
-5. Multi-line node notes or descriptions.
-6. Node metadata.
-7. Aliases for node text.
-8. File include/import.
-9. Multiple graphs per project.
-10. Vim-like command mode.
-11. Configurable keybindings.
-12. Clipboard integration.
-13. Watch/reload file changes.
-14. Merge-conflict assistance.
-15. Subgraph filtering.
-16. “Why is this blocked?” view.
-17. “What would this unblock?” preview.
-18. Optional automatic topological sort export, explicitly labeled as arbitrary among ties.
-19. Graph statistics.
-20. Interactive selective node ID rekey command.
-21. Completion timestamps, recurrence rules, and execution history.
-
-## 28. Open Decisions
-
-These can be decided during implementation:
-
-1. Should comments be preserved exactly on save, or can v1 canonicalization drop them?
-2. Should the UI primarily say “parents/children” or “blockers/unblocked by”?
-3. Should order export be available before the order is complete?
-4. Should deleting a connected node require typing the node text, or is a simple confirmation enough?
-5. Should search be substring-only in v1, or fuzzy from the beginning?
-6. How aggressively should slug generation normalize Unicode text?
-
-Recommended v1 defaults:
-
-1. Comment preservation is nice but not required.
-2. Use “parents/children” in node-editing views.
-3. Use “ready” for durable completion workflow and “available” inside order mode.
-4. Allow export of partial and complete orders.
-5. Start with substring search.
-6. Implement simple readable ASCII slug generation and uniquification.
-
-## 29. Implementation Prompt for Codex
+## 27. Implementation Prompt for Codex
 
 Build `dagim`, a terminal-first editor for small single-file DAGs, using this document as the source of truth.
 
