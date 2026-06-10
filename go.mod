@@ -1,4 +1,4 @@
-module dagim
+module github.com/tunesmith/dagim
 
 go 1.26.4
 

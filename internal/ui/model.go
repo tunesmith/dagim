@@ -12,8 +12,8 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"dagim/internal/dagimfile"
-	"dagim/internal/graph"
+	"github.com/tunesmith/dagim/internal/dagimfile"
+	"github.com/tunesmith/dagim/internal/graph"
 )
 
 type mode int

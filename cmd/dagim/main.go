@@ -9,9 +9,9 @@ import (
 	"os"
 	"strings"
 
-	"dagim/internal/dagimfile"
-	"dagim/internal/graph"
-	"dagim/internal/ui"
+	"github.com/tunesmith/dagim/internal/dagimfile"
+	"github.com/tunesmith/dagim/internal/graph"
+	"github.com/tunesmith/dagim/internal/ui"
 )
 
 const version = "dev"

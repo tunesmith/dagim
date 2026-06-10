@@ -7,7 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"dagim/internal/graph"
+	"github.com/tunesmith/dagim/internal/graph"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

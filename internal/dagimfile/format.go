@@ -11,7 +11,7 @@ import (
 	"strings"
 	"unicode"
 
-	"dagim/internal/graph"
+	"github.com/tunesmith/dagim/internal/graph"
 )
 
 const Header = "# dagim v1"

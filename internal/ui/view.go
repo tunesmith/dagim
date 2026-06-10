@@ -8,7 +8,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"dagim/internal/graph"
+	"github.com/tunesmith/dagim/internal/graph"
 )
 
 const (

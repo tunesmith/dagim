@@ -32,12 +32,10 @@ Requirements:
 - Go 1.26 or newer
 - A terminal with enough space for a TUI
 
-Clone the repository and install the command:
+Install the command:
 
 ```sh
-git clone https://github.com/tunesmith/dagim.git
-cd dagim
-go install ./cmd/dagim
+go install github.com/tunesmith/dagim/cmd/dagim@latest
 ```
 
 If `dagim` is not found after installation, add Go's bin directory to your `PATH`:

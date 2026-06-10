@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"dagim/internal/graph"
+	"github.com/tunesmith/dagim/internal/graph"
 )
 
 func TestParseEmptyGraph(t *testing.T) {

@@ -13,7 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"dagim/internal/graph"
+	"github.com/tunesmith/dagim/internal/graph"
 )
 
 func TestRewriteRegeneratesIDsAndSaves(t *testing.T) {
