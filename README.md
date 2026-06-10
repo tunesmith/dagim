@@ -1,68 +1,41 @@
 # dagim
 
-dagim is a text-based editor for simple directed acyclic graphs.
+dagim is a terminal editor for small, single-file directed acyclic graphs.
 
 ![dagim demo](docs/demo.gif)
 
-Dagim allows users to create nodes, and then specify parents
-and children for those nodes, with an interface designed for 
-fast entry and navigation. Users can also see the list of 
-all unblocked nodes and then mark nodes complete to unblock
-their children child nodes and bring them to the top.
+Use dagim for dependency-shaped notes, plans, recipes, and todo graphs that do
+not fit cleanly into an outline. It is built for fast keyboard entry, parent and
+child linking, graph navigation, and working through the currently unblocked
+nodes.
 
-*Motive:* People often think in graphs without realizing it, but 
-graph tools are complicated. It's often easier to just write a 
-bullet list outline even if the ideas we're processing aren't 
-tree-based. This can limit our thinking.
+An edge `A -> B` means only that `B` stays blocked until `A` is complete.
+
+## Why
+
+People often think in graphs, but most writing tools make trees cheaper than
+graphs. It is easy to reach for a bullet list even when the thing being modeled
+has multiple dependencies, shared prerequisites, or several valid paths through
+it.
 
 One example is recipes. (Check out the [gumbo example](examples/gumbo.dagim).)
-Cookbook recipes are a linear tsort projection of a DAG.
-Recipes in DAG form can encourage more flexibility and
-collaboration.  Generally, almost any process with multiple 
-dependencies is better represented as a DAG. But easy tools 
-and utilities for graphs lag other text-based tools. 
-`dagim` seeks to shrink that gap somewhat.
+Cookbook recipes are a linear tsort projection of a DAG. Recipes in DAG form can
+make parallel prep and dependencies more visible, and collaboration more possible.
 
-**Instructions:** Use dagim to edit a `*.dagim` file. Press `a` to add
-a node. You can add more to the top layer, or you can select 
-a node and then add parents or children. Adding parents or
-children has autocomplete in case you'd like to link an
-already-created node.
+dagim is intentionally primitive: one readable text file, one DAG, stable node
+IDs, durable completion state, and a small TUI for editing and traversal.
 
-`dagim` prevents cycles by preventing you from adding upstream
-nodes as children, or downstream nodes as parents.
-
-An edge `A -> B` means `B` stays blocked until `A` is complete.
-
-You can also hit `Space` to "complete" a top-layer node, 
-which will refresh the top list to show the newly parentless
-nodes. This is a useful way to process your way through a 
-complex todo graph without getting overwhelmed. Toggling a 
-node undone will also toggle its completed descendants undone.
-
-`dagim` documents are intended to be source-readable, with 
-useful diffs, in case you want to track them in a repository.
-
-## Etymology
-
-A play on vim: "dag improved", as in a small text tool for DAGs.
-
-## Principles
-
-The intent is to keep `dagim` as a fairly primitive, simple tool,
-without bloating its UI with distracting sidecar features.
-
-## Install From Source
+## Install
 
 Requirements:
 
-- Go
+- Go 1.26 or newer
 - A terminal with enough space for a TUI
 
 Clone the repository and install the command:
 
 ```sh
-git clone <repo-url>
+git clone https://github.com/tunesmith/dagim.git
 cd dagim
 go install ./cmd/dagim
 ```
@@ -73,7 +46,24 @@ If `dagim` is not found after installation, add Go's bin directory to your `PATH
 export PATH="$HOME/go/bin:$PATH"
 ```
 
-## Usage
+## Quick Start
+
+Create or open a graph:
+
+```sh
+dagim my-plan.dagim
+```
+
+Inside the TUI:
+
+1. Press `a` to add a node.
+2. Select a node and press `p` or `c` to add or link a parent or child.
+3. Press `r` to see ready nodes: incomplete nodes whose parents are complete.
+4. Press `Space` to mark a ready node complete and unblock its children.
+
+dagim prevents cycles by rejecting links that would make an upstream node a
+child, or a downstream node a parent. Toggling a node undone also toggles its
+completed descendants undone, so completion state stays dependency-valid.
 
 Open an example graph:
 
@@ -87,25 +77,54 @@ Check a graph without opening the TUI:
 dagim --check examples/gumbo.dagim
 ```
 
+## File Format
+
+dagim files are source-readable UTF-8 text with stable IDs and useful diffs:
+
+```text
+# dagim v1
+
+node prep-rice: Prep rice
+  complete
+
+node cook-gumbo: Cook gumbo
+  parent prep-rice  # Prep rice
+```
+
+Node IDs are generated from node text when you create nodes in the TUI. The text
+can be edited later without changing identity.
+
 ## Common Keys
 
 - `a`: add node to top
+- `Enter`: focus selected node
 - `p`: add/link parent to current node
 - `c`: add/link child to current node
+- `e`: edit current node text
+- `x`: unlink selected parent or child
+- `d`: delete current node
 - `/`: search nodes
 - `r`: ready/top view; nodes with no uncompleted parents
 - `l`: view leaves; nodes with no children
 - `Space`: toggle done/undone
 - `u`: undo the last graph edit in the current session
 - `o`: order remaining nodes for an ephemeral sequential list
+- `J` / `K`: reorder the selected visible item
 - `v`: view completed nodes
+- `R`: reset all completion state
 - `C`: check diagnostics
 - `W`: rewrite IDs/canonical format
+- `?`: show help
 - `q`: quit
+
+## Etymology
+
+A play on vim: "dag improved", as in a small text tool for DAGs.
 
 ## Status
 
-Experimental and actively dogfooded. File format and UI details may still change.
+Pre-1.0 and actively dogfooded. File format and UI details may still change
+before the first stable release.
 
 ## License
 
