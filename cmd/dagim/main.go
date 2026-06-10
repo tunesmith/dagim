@@ -14,7 +14,7 @@ import (
 	"github.com/tunesmith/dagim/internal/ui"
 )
 
-const version = "dev"
+var version = "dev"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -41,7 +41,7 @@ func run(args []string) error {
 		return err
 	}
 	if *showVersion {
-		fmt.Println("dagim " + version)
+		fmt.Println(versionLine())
 		return nil
 	}
 	if fs.NArg() != 1 {
@@ -85,6 +85,10 @@ func runCheck(path string) error {
 		fmt.Printf("transitive: %s -> %s via %s\n", edge.Parent, edge.Child, formatPath(edge.Path))
 	}
 	return nil
+}
+
+func versionLine() string {
+	return "dagim " + version
 }
 
 func formatPath(path []graph.NodeID) string {
