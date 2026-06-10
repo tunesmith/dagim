@@ -1,6 +1,6 @@
 # dagim Design Spec
 
-Status: working design draft  
+Status: implemented v1 design  
 Audience: implementation agent / Codex session  
 Project name: `dagim`  
 Primary command: `dagim FILE`

@@ -27,18 +27,20 @@ IDs, durable completion state, and a small TUI for editing and traversal.
 
 ## Install
 
-Requirements:
+With Homebrew:
 
-- Go 1.26 or newer
-- A terminal with enough space for a TUI
+```sh
+brew install tunesmith/tap/dagim
+```
 
-Install the command:
+From source with Go 1.26 or newer:
 
 ```sh
 go install github.com/tunesmith/dagim/cmd/dagim@latest
 ```
 
-If `dagim` is not found after installation, add Go's bin directory to your `PATH`:
+If `dagim` is not found after installing with Go, add Go's bin directory to
+your `PATH`:
 
 ```sh
 export PATH="$HOME/go/bin:$PATH"
@@ -121,8 +123,9 @@ A play on vim: "dag improved", as in a small text tool for DAGs.
 
 ## Status
 
-Pre-1.0 and actively dogfooded. File format and UI details may still change
-before the first stable release.
+Actively maintained and dogfooded. The `.dagim` file format is versioned
+(`# dagim v1`); compatibility should be preserved for v1 files unless a future
+format version is introduced.
 
 ## License
 
