@@ -104,6 +104,8 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "a":
 			return m.setPrompt(promptAddNode, "Add first node", "")
+		case "u":
+			m = m.undoGraphChange()
 		case "?":
 			m.previous = modeNode
 			m.mode = modeHelp
@@ -151,17 +153,18 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "x":
 		if len(items) > 0 && m.cursor >= 0 && m.cursor < len(items) {
 			item := items[m.cursor]
+			snapshot := m.undoSnapshot()
 			if item.kind == "parent" {
 				if err := m.g.RemoveEdge(item.id, m.current); err != nil {
 					m.message = err.Error()
 				} else {
-					m = m.markChanged()
+					m = m.markChangedWithUndo(snapshot)
 				}
 			} else {
 				if err := m.g.RemoveEdge(m.current, item.id); err != nil {
 					m.message = err.Error()
 				} else {
-					m = m.markChanged()
+					m = m.markChangedWithUndo(snapshot)
 				}
 			}
 			if m.cursor >= len(m.relationItems()) && m.cursor > 0 {
@@ -184,6 +187,8 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.leavesCursor = 0
 	case " ":
 		m = m.toggleComplete(m.current)
+	case "u":
+		m = m.undoGraphChange()
 	case "J":
 		m = m.reorderSelected(items, 1)
 	case "K":
@@ -255,6 +260,7 @@ func (m Model) submitPrompt(useSuggestion bool) (tea.Model, tea.Cmd) {
 	value := strings.TrimSpace(m.input.Value())
 	switch m.promptAction {
 	case promptAddNode:
+		snapshot := m.undoSnapshot()
 		duplicateText := m.hasExactText(value)
 		id, err := m.g.AddNode(value)
 		if err != nil {
@@ -266,13 +272,14 @@ func (m Model) submitPrompt(useSuggestion bool) (tea.Model, tea.Cmd) {
 		if duplicateText {
 			m.message = "created separate node with duplicate text"
 		}
-		m = m.markChanged()
+		m = m.markChangedWithUndo(snapshot)
 	case promptEdit:
+		snapshot := m.undoSnapshot()
 		if err := m.g.EditNodeText(m.current, value); err != nil {
 			m.message = err.Error()
 			return m, nil
 		}
-		m = m.markChanged()
+		m = m.markChangedWithUndo(snapshot)
 	case promptAddParent, promptAddChild:
 		asParent := m.promptAction == promptAddParent
 		var id graph.NodeID
@@ -344,17 +351,20 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) updateReady(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	items := m.readyItems()
+	footer := m.readyFooter()
 	switch msg.String() {
 	case "a":
 		return m.setPrompt(promptAddNode, "Add node", "")
+	case "u":
+		m = m.undoGraphChange()
 	case "j", "down":
 		m.readyCursor = moveListCursor(m.readyCursor, len(items), 1)
 	case "k", "up":
 		m.readyCursor = moveListCursor(m.readyCursor, len(items), -1)
 	case "pgdown":
-		m.readyCursor = moveListCursor(m.readyCursor, len(items), m.listPageSize())
+		m.readyCursor = moveListCursor(m.readyCursor, len(items), m.listPageSizeForFooter(footer))
 	case "pgup":
-		m.readyCursor = moveListCursor(m.readyCursor, len(items), -m.listPageSize())
+		m.readyCursor = moveListCursor(m.readyCursor, len(items), -m.listPageSizeForFooter(footer))
 	case "home":
 		m.readyCursor = moveListCursor(0, len(items), 0)
 	case "end":
@@ -440,17 +450,20 @@ func (m Model) updateReady(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	leaves := m.visibleLeaves()
+	footer := m.leavesFooter()
 	switch msg.String() {
 	case "esc":
 		m.mode = m.leavesReturn
+	case "u":
+		m = m.undoGraphChange()
 	case "j", "down":
 		m.leavesCursor = moveListCursor(m.leavesCursor, len(leaves), 1)
 	case "k", "up":
 		m.leavesCursor = moveListCursor(m.leavesCursor, len(leaves), -1)
 	case "pgdown":
-		m.leavesCursor = moveListCursor(m.leavesCursor, len(leaves), m.listPageSize())
+		m.leavesCursor = moveListCursor(m.leavesCursor, len(leaves), m.listPageSizeForFooter(footer))
 	case "pgup":
-		m.leavesCursor = moveListCursor(m.leavesCursor, len(leaves), -m.listPageSize())
+		m.leavesCursor = moveListCursor(m.leavesCursor, len(leaves), -m.listPageSizeForFooter(footer))
 	case "home":
 		m.leavesCursor = moveListCursor(0, len(leaves), 0)
 	case "end":
@@ -677,6 +690,7 @@ func (m Model) deleteCurrent() Model {
 	if m.current == "" {
 		return m
 	}
+	snapshot := m.undoSnapshot()
 	order := m.g.Order()
 	index := 0
 	for i, id := range order {
@@ -693,14 +707,14 @@ func (m Model) deleteCurrent() Model {
 	if len(order) == 0 {
 		m.current = ""
 		m.cursor = 0
-		return m.markChanged()
+		return m.markChangedWithUndo(snapshot)
 	}
 	if index >= len(order) {
 		index = len(order) - 1
 	}
 	m.current = order[index]
 	m.cursor = 0
-	return m.markChanged()
+	return m.markChangedWithUndo(snapshot)
 }
 
 func (m Model) startDelete(id graph.NodeID, returnMode mode) Model {

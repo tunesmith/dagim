@@ -544,6 +544,122 @@ func TestEditAutosaves(t *testing.T) {
 	}
 }
 
+func TestUndoRestoresEditAndAutosaves(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.dagim")
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	m := New(path, g)
+	m.mode = modeNode
+	m.current = "root-node"
+
+	next, _ := m.Update(runeKey('e'))
+	prompt := next.(Model)
+	prompt.input.SetValue("Renamed root")
+	next, _ = prompt.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := next.(Model)
+
+	next, _ = updated.Update(runeKey('u'))
+	undone := next.(Model)
+
+	node, _ := undone.g.Node("root-node")
+	if node.Text != "Root node" {
+		t.Fatalf("node text = %q", node.Text)
+	}
+	if undone.message != "undid last change" {
+		t.Fatalf("message = %q", undone.message)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "Root node") || strings.Contains(text, "Renamed root") {
+		t.Fatalf("undo was not autosaved:\n%s", text)
+	}
+}
+
+func TestUndoRestoresDeletedNodeAndEdges(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("current", "Current"))
+	must(t, g.AddNodeWithID("child", "Child"))
+	must(t, g.AddEdge("current", "child"))
+	m := newTestModel(t, g)
+	m.mode = modeNode
+	m.current = "current"
+
+	next, _ := m.Update(runeKey('d'))
+	confirming := next.(Model)
+	next, _ = confirming.Update(runeKey('y'))
+	deleted := next.(Model)
+	if deleted.g.HasNode("current") {
+		t.Fatal("delete did not remove node")
+	}
+
+	next, _ = deleted.Update(runeKey('u'))
+	undone := next.(Model)
+	if !undone.g.HasNode("current") {
+		t.Fatal("undo did not restore deleted node")
+	}
+	children, err := undone.g.ChildrenOf("current")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(children, []graph.NodeID{"child"}) {
+		t.Fatalf("children = %#v", children)
+	}
+	if undone.current != "current" {
+		t.Fatalf("current = %q", undone.current)
+	}
+}
+
+func TestUndoRestoresCompletionCascadeAsOneAction(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("a", "A"))
+	must(t, g.AddNodeWithID("b", "B"))
+	must(t, g.AddNodeWithID("c", "C"))
+	must(t, g.AddEdge("a", "b"))
+	must(t, g.AddEdge("b", "c"))
+	for _, id := range []graph.NodeID{"a", "b", "c"} {
+		must(t, g.MarkComplete(id))
+	}
+	m := newTestModel(t, g)
+	m.mode = modeNode
+	m.current = "b"
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	updated := next.(Model)
+	b, _ := updated.g.Node("b")
+	c, _ := updated.g.Node("c")
+	if b.Complete || c.Complete {
+		t.Fatalf("cascade did not mark descendants undone: b=%v c=%v", b.Complete, c.Complete)
+	}
+
+	next, _ = updated.Update(runeKey('u'))
+	undone := next.(Model)
+	for _, id := range []graph.NodeID{"a", "b", "c"} {
+		node, _ := undone.g.Node(id)
+		if !node.Complete {
+			t.Fatalf("%s was not restored complete", id)
+		}
+	}
+}
+
+func TestUndoWithEmptyStackShowsMessage(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("root-node", "Root node"))
+	m := newTestModel(t, g)
+
+	next, _ := m.Update(runeKey('u'))
+	updated := next.(Model)
+
+	if updated.message != "nothing to undo" {
+		t.Fatalf("message = %q", updated.message)
+	}
+	if !updated.g.HasNode("root-node") {
+		t.Fatal("empty undo changed graph")
+	}
+}
+
 func TestReadyReordersHighlightedNode(t *testing.T) {
 	g := graph.New()
 	must(t, g.AddNodeWithID("first", "First"))
@@ -701,7 +817,7 @@ func TestReadyWindowsItemsToTerminalHeight(t *testing.T) {
 
 	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
 	paged := next.(Model)
-	if paged.readyCursor != 8 {
+	if paged.readyCursor != 4 {
 		t.Fatalf("readyCursor after PgDown = %d", paged.readyCursor)
 	}
 
@@ -1400,10 +1516,10 @@ func TestLeavesWindowsItemsToTerminalHeight(t *testing.T) {
 	m.width = 48
 
 	view := m.viewLeaves()
-	if !strings.Contains(view, "Leaves 1-3 of 20") {
+	if !strings.Contains(view, "Leaves 1-2 of 20") {
 		t.Fatalf("expected initial leaves window:\n%s", view)
 	}
-	if strings.Contains(view, "Leaf item 04") {
+	if strings.Contains(view, "Leaf item 03") {
 		t.Fatalf("rendered beyond visible leaves window:\n%s", view)
 	}
 	if lines := strings.Count(view, "\n") + 1; lines > m.height {
@@ -1412,13 +1528,13 @@ func TestLeavesWindowsItemsToTerminalHeight(t *testing.T) {
 
 	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
 	paged := next.(Model)
-	if paged.leavesCursor != 6 {
+	if paged.leavesCursor != 1 {
 		t.Fatalf("leavesCursor after PgDown = %d", paged.leavesCursor)
 	}
 
 	paged.leavesCursor = 12
 	view = paged.viewLeaves()
-	if !strings.Contains(view, "Leaves 12-14 of 20") {
+	if !strings.Contains(view, "Leaves 12-13 of 20") {
 		t.Fatalf("expected centered leaves window:\n%s", view)
 	}
 	if !strings.Contains(view, "Leaf item 13") {

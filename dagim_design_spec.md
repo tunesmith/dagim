@@ -1145,6 +1145,21 @@ Autosave behavior:
 
 There is no normal manual save key in v1. `W` remains the explicit rewrite/rekey command.
 
+### 22.2 Undo
+
+The TUI should support session-only undo for graph-editing actions.
+
+Undo behavior:
+
+1. `u` restores the graph to its state before the last successful graph mutation.
+2. Undo history is kept in memory only and is discarded when the program exits.
+3. Undo restores one user intent at a time. For example, marking a node undone and cascading completed descendants undone is one undoable action.
+4. Undo should autosave the restored graph using the same atomic save path as normal graph mutations.
+5. Undo should be available in normal graph views such as node, ready, leaves, and empty-graph views.
+6. Undo should not intercept text entry in prompt or search modes.
+7. Order remaining mode may keep its own temporary undo for order picks; graph undo does not need to operate inside order mode.
+8. Version 1 does not need redo.
+
 ### 22.3 Quit
 
 If quitting with `q` and autosave has failed, prompt:

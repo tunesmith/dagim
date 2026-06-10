@@ -96,6 +96,7 @@ dagim --check examples/gumbo.dagim
 - `r`: ready/top view; nodes with no uncompleted parents
 - `l`: view leaves; nodes with no children
 - `Space`: toggle done/undone
+- `u`: undo the last graph edit in the current session
 - `o`: order remaining nodes for an ephemeral sequential list
 - `v`: view completed nodes
 - `C`: check diagnostics

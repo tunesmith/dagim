@@ -75,7 +75,7 @@ func (m Model) viewNode() string {
 		return strings.Join([]string{
 			titleStyle.Render("No nodes yet."),
 			"",
-			commandStyle.Render("a add first node    ? help    q quit"),
+			commandStyle.Render("a add first node    u undo    ? help    q quit"),
 		}, "\n")
 	}
 	node, ok := m.g.Node(m.current)
@@ -150,7 +150,7 @@ func (m Model) viewNode() string {
 		{"i inspect", "e edit", "d delete node", "/ search"},
 		{"r ready", "l leaves", "o order", "C check"},
 		{"Space done/undone", "v completed", "R reset", "W rewrite"},
-		{"J/K reorder", "q quit", "? help"},
+		{"J/K reorder", "u undo", "q quit", "? help"},
 	}))
 	return b.String()
 }
@@ -502,7 +502,7 @@ func (m Model) viewHelp() string {
 		"x unlink selected i inspect            e edit",
 		"d delete node     / search             r ready",
 		"l leaves          o order remaining    J/K reorder",
-		"Space done/undone v completed",
+		"Space done/undone u undo              v completed",
 		"R reset done      W rewrite file       C check",
 		"q quit",
 		"ctrl+c force quit ctrl+z suspend",
@@ -539,7 +539,7 @@ func (m Model) readyFooter() string {
 		{"j/k move", "PgUp/PgDn page", "Enter focus", "Space done"},
 		{"d delete", "/ search", "v completed", "l leaves"},
 		{"o order", "R reset", "W rewrite", "C check"},
-		{"q quit", "? help"},
+		{"u undo", "q quit", "? help"},
 	})
 }
 
@@ -548,7 +548,7 @@ func (m Model) leavesFooter() string {
 		{"j/k move", "PgUp/PgDn page", "Enter focus", "Space done"},
 		{"r ready", "/ search", "v completed", "o order"},
 		{"J/K reorder", "R reset", "W rewrite", "C check"},
-		{"q quit", "Esc back", "? help"},
+		{"u undo", "q quit", "Esc back", "? help"},
 	})
 }
 

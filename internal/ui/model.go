@@ -52,6 +52,23 @@ type completionItem struct {
 	id graph.NodeID
 }
 
+const undoLimit = 50
+
+type undoSnapshot struct {
+	g             *graph.Graph
+	mode          mode
+	previous      mode
+	current       graph.NodeID
+	cursor        int
+	readyCursor   int
+	leavesCursor  int
+	leavesReturn  mode
+	searchCursor  int
+	checkScroll   int
+	viewScroll    int
+	showCompleted bool
+}
+
 type Model struct {
 	path string
 	g    *graph.Graph
@@ -76,6 +93,7 @@ type Model struct {
 	checkScroll   int
 	viewScroll    int
 	showCompleted bool
+	undoStack     []undoSnapshot
 
 	dirty   bool
 	message string
@@ -305,8 +323,8 @@ func (m Model) listItemLimit() int {
 	return limit
 }
 
-func (m Model) listPageSize() int {
-	size := m.listItemLimit() - 1
+func (m Model) listPageSizeForFooter(footer string) int {
+	size := m.listItemLimitForFooter(footer) - 1
 	if size < 1 {
 		return 1
 	}
@@ -404,6 +422,7 @@ func (m Model) toggleComplete(id graph.NodeID) Model {
 		m.message = "node missing"
 		return m
 	}
+	snapshot := m.undoSnapshot()
 	if node.Complete {
 		count, err := m.g.MarkIncompleteCascade(id)
 		if err != nil {
@@ -419,7 +438,7 @@ func (m Model) toggleComplete(id graph.NodeID) Model {
 		} else {
 			m.message = fmt.Sprintf("marked %d nodes undone", count)
 		}
-		return m.markChanged()
+		return m.markChangedWithUndo(snapshot)
 	}
 	if err := m.g.MarkComplete(id); err != nil {
 		var blocked graph.BlockedError
@@ -435,17 +454,18 @@ func (m Model) toggleComplete(id graph.NodeID) Model {
 		return m
 	}
 	m.message = "marked done"
-	return m.markChanged()
+	return m.markChangedWithUndo(snapshot)
 }
 
 func (m Model) resetCompletion() Model {
+	snapshot := m.undoSnapshot()
 	count := m.g.ResetCompletion()
 	if count == 0 {
 		m.message = "no completed nodes"
 		return m
 	}
 	m.message = fmt.Sprintf("reset %d completed nodes", count)
-	return m.markChanged()
+	return m.markChangedWithUndo(snapshot)
 }
 
 func (m Model) reorderSelected(items []relationItem, direction int) Model {
@@ -468,9 +488,10 @@ func (m Model) reorderSelected(items []relationItem, direction int) Model {
 	if orderIndex < 0 {
 		return m
 	}
+	snapshot := m.undoSnapshot()
 	if m.g.MoveTo(selected.id, orderIndex) {
 		m.cursor = targetIndex
-		m = m.markChanged()
+		m = m.markChangedWithUndo(snapshot)
 	}
 	return m
 }
@@ -487,9 +508,10 @@ func (m Model) reorderListItem(ids []graph.NodeID, cursor, direction int) (Model
 	if orderIndex < 0 {
 		return m, cursor
 	}
+	snapshot := m.undoSnapshot()
 	if m.g.MoveTo(ids[cursor], orderIndex) {
 		cursor = target
-		m = m.markChanged()
+		m = m.markChangedWithUndo(snapshot)
 	}
 	return m, cursor
 }
@@ -514,6 +536,11 @@ func (m Model) reorderReadyItem(direction int) Model {
 func (m Model) markChanged() Model {
 	m.dirty = true
 	return m.autosave()
+}
+
+func (m Model) markChangedWithUndo(snapshot undoSnapshot) Model {
+	m = m.pushUndo(snapshot)
+	return m.markChanged()
 }
 
 func (m Model) autosave() Model {
@@ -541,11 +568,13 @@ func (m Model) save() Model {
 
 func (m Model) rewrite() Model {
 	current := m.current
+	snapshot := m.undoSnapshot()
 	mapping, err := m.g.RekeyByText()
 	if err != nil {
 		m.message = err.Error()
 		return m
 	}
+	m = m.pushUndo(snapshot)
 	if err := dagimfile.SaveAtomic(m.path, m.g); err != nil {
 		m.dirty = true
 		m.message = err.Error()
@@ -612,6 +641,7 @@ func (m Model) exportOrder(path string) Model {
 }
 
 func (m Model) addLinkedNode(text string, asParent bool) Model {
+	snapshot := m.undoSnapshot()
 	id, err := m.g.AddNode(strings.TrimSpace(text))
 	if err != nil {
 		m.message = err.Error()
@@ -619,12 +649,12 @@ func (m Model) addLinkedNode(text string, asParent bool) Model {
 	}
 	if m.current == "" {
 		m.current = id
-		return m.markChanged()
+		return m.markChangedWithUndo(snapshot)
 	}
 	if asParent {
-		m, err = m.addEdge(id, m.current)
+		m, err = m.addEdgeWithUndo(id, m.current, snapshot)
 	} else {
-		m, err = m.addEdge(m.current, id)
+		m, err = m.addEdgeWithUndo(m.current, id, snapshot)
 	}
 	if err != nil {
 		_ = m.g.DeleteNode(id)
@@ -635,6 +665,10 @@ func (m Model) addLinkedNode(text string, asParent bool) Model {
 }
 
 func (m Model) addEdge(parent, child graph.NodeID) (Model, error) {
+	return m.addEdgeWithUndo(parent, child, m.undoSnapshot())
+}
+
+func (m Model) addEdgeWithUndo(parent, child graph.NodeID, snapshot undoSnapshot) (Model, error) {
 	if err := m.g.AddEdge(parent, child); err != nil {
 		return m, err
 	}
@@ -651,7 +685,85 @@ func (m Model) addEdge(parent, child graph.NodeID) (Model, error) {
 			m.message = fmt.Sprintf("linked; marked %d nodes undone", count)
 		}
 	}
-	return m.markChanged(), nil
+	return m.markChangedWithUndo(snapshot), nil
+}
+
+func (m Model) undoSnapshot() undoSnapshot {
+	snapshotMode := m.mode
+	switch snapshotMode {
+	case modePrompt, modeConfirmDelete, modeConfirmRewrite, modeConfirmReset, modeConfirmQuit:
+		snapshotMode = m.previous
+	}
+	return undoSnapshot{
+		g:             m.g.Clone(),
+		mode:          stableUndoMode(snapshotMode),
+		previous:      m.previous,
+		current:       m.current,
+		cursor:        m.cursor,
+		readyCursor:   m.readyCursor,
+		leavesCursor:  m.leavesCursor,
+		leavesReturn:  m.leavesReturn,
+		searchCursor:  m.searchCursor,
+		checkScroll:   m.checkScroll,
+		viewScroll:    m.viewScroll,
+		showCompleted: m.showCompleted,
+	}
+}
+
+func stableUndoMode(m mode) mode {
+	switch m {
+	case modeNode, modeReady, modeLeaves:
+		return m
+	default:
+		return modeNode
+	}
+}
+
+func (m Model) pushUndo(snapshot undoSnapshot) Model {
+	if snapshot.g == nil {
+		return m
+	}
+	m.undoStack = append(m.undoStack, snapshot)
+	if len(m.undoStack) > undoLimit {
+		m.undoStack = append([]undoSnapshot(nil), m.undoStack[len(m.undoStack)-undoLimit:]...)
+	}
+	return m
+}
+
+func (m Model) undoGraphChange() Model {
+	if len(m.undoStack) == 0 {
+		m.message = "nothing to undo"
+		return m
+	}
+	snapshot := m.undoStack[len(m.undoStack)-1]
+	m.undoStack = m.undoStack[:len(m.undoStack)-1]
+	m.g = snapshot.g.Clone()
+	m.mode = snapshot.mode
+	m.previous = snapshot.previous
+	m.current = snapshot.current
+	m.cursor = snapshot.cursor
+	m.readyCursor = snapshot.readyCursor
+	m.leavesCursor = snapshot.leavesCursor
+	m.leavesReturn = snapshot.leavesReturn
+	m.searchCursor = snapshot.searchCursor
+	m.checkScroll = snapshot.checkScroll
+	m.viewScroll = snapshot.viewScroll
+	m.showCompleted = snapshot.showCompleted
+	m.promptAction = promptNone
+	m.order = nil
+	m = m.ensureCurrent()
+	if len(m.g.Nodes()) == 0 {
+		m.mode = modeNode
+	}
+	m.cursor = clampedCursor(m.cursor, len(m.relationItems()))
+	m.readyCursor = clampedCursor(m.readyCursor, len(m.readyItems()))
+	m.leavesCursor = clampedCursor(m.leavesCursor, len(m.visibleLeaves()))
+	m.dirty = true
+	m = m.autosave()
+	if !m.dirty {
+		m.message = "undid last change"
+	}
+	return m
 }
 
 func inputWidth(width int) int {
