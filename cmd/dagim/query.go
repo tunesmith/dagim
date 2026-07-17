@@ -175,6 +175,10 @@ func runHelpCommand(args []string, stdout io.Writer) error {
 		writeListUsage(stdout)
 	case "show":
 		writeShowUsage(stdout)
+	case "complete":
+		writeCompleteUsage(stdout)
+	case "reopen":
+		writeReopenUsage(stdout)
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
@@ -294,16 +298,9 @@ func writeCheckJSON(w io.Writer, result *dagimfile.CheckResult) error {
 		})
 	}
 	return writeJSON(w, checkOutput{
-		SchemaVersion: outputSchemaVersion,
-		OK:            true,
-		Stats: statsOutput{
-			Nodes:    result.Stats.Nodes,
-			Edges:    result.Stats.Edges,
-			Complete: result.Stats.Complete,
-			Ready:    result.Stats.Ready,
-			Roots:    result.Stats.Roots,
-			Leaves:   result.Stats.Leaves,
-		},
+		SchemaVersion:   outputSchemaVersion,
+		OK:              true,
+		Stats:           makeStatsOutput(result.Stats),
 		Canonical:       result.IsCanonical,
 		TransitiveEdges: edges,
 	})

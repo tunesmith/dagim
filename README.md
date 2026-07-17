@@ -94,8 +94,28 @@ dagim list examples/gumbo.dagim --state blocked
 dagim show examples/gumbo.dagim slice-andouille-sausage
 ```
 
-Add `--json` to `check`, `ready`, `list`, or `show` for structured output. Flags
-may appear before or after positional arguments:
+Advance completion state without opening the TUI:
+
+```sh
+# Work on a copy of the example
+cp examples/gumbo.dagim /tmp/gumbo.dagim
+
+# Complete a ready node and report what became ready
+dagim complete /tmp/gumbo.dagim prepare-rice-cooker-press-start
+
+# Preview the completion state a reopen would clear
+dagim reopen /tmp/gumbo.dagim prepare-rice-cooker-press-start --dry-run
+
+# Reopen a node and cascade through its completed descendants
+dagim reopen /tmp/gumbo.dagim prepare-rice-cooker-press-start
+```
+
+`complete` rejects nodes with incomplete parents. `reopen` preserves completion
+validity by also reopening completed descendants.
+
+Add `--json` to any scriptable command for structured output. Mutation results
+include changed, newly ready, and newly blocked nodes. Flags may appear before or
+after positional arguments:
 
 ```sh
 dagim ready examples/gumbo.dagim --json

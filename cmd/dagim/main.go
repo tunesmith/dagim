@@ -39,6 +39,10 @@ func runWithIO(args []string, stdout, stderr io.Writer) error {
 			return runListCommand(args[1:], stdout, stderr)
 		case "show":
 			return runShowCommand(args[1:], stdout, stderr)
+		case "complete":
+			return runCompleteCommand(args[1:], stdout, stderr)
+		case "reopen":
+			return runReopenCommand(args[1:], stdout, stderr)
 		case "help":
 			return runHelpCommand(args[1:], stdout)
 		}
@@ -66,7 +70,7 @@ func runLegacy(args []string, stdout, stderr io.Writer) error {
 		return nil
 	}
 	if *jsonOutput && !*check {
-		return fmt.Errorf("--json requires --check or a read-only subcommand")
+		return fmt.Errorf("--json requires --check or a subcommand")
 	}
 	if fs.NArg() != 1 {
 		fs.Usage()
@@ -125,6 +129,8 @@ func writeTopLevelUsage(w io.Writer) {
 	fmt.Fprintln(w, "  dagim ready [--json] FILE")
 	fmt.Fprintln(w, "  dagim list [--state STATE] [--json] FILE")
 	fmt.Fprintln(w, "  dagim show [--json] FILE NODE")
+	fmt.Fprintln(w, "  dagim complete [--json] FILE NODE")
+	fmt.Fprintln(w, "  dagim reopen [--dry-run] [--json] FILE NODE")
 	fmt.Fprintln(w, "  dagim --check [--json] FILE")
 	fmt.Fprintln(w, "  dagim --version")
 	fmt.Fprintln(w)
