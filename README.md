@@ -74,7 +74,39 @@ dagim examples/gumbo.dagim
 Check a graph without opening the TUI:
 
 ```sh
-dagim --check examples/gumbo.dagim
+dagim check examples/gumbo.dagim
+```
+
+`dagim --check FILE` remains available as a compatibility alias.
+
+## Scriptable Commands
+
+Read graph state without opening the TUI:
+
+```sh
+# Incomplete nodes whose parents are complete
+dagim ready examples/gumbo.dagim
+
+# All blocked nodes and their incomplete parents
+dagim list examples/gumbo.dagim --state blocked
+
+# One node with its state, blockers, parents, and children
+dagim show examples/gumbo.dagim slice-andouille-sausage
+```
+
+Add `--json` to `check`, `ready`, `list`, or `show` for structured output. Flags
+may appear before or after positional arguments:
+
+```sh
+dagim ready examples/gumbo.dagim --json
+dagim list --state ready --json examples/gumbo.dagim
+```
+
+During development, run these commands directly from a checkout without
+installing the binary:
+
+```sh
+go run ./cmd/dagim ready examples/gumbo.dagim
 ```
 
 ## File Format
