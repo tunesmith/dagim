@@ -43,6 +43,14 @@ func runWithIO(args []string, stdout, stderr io.Writer) error {
 			return runCompleteCommand(args[1:], stdout, stderr)
 		case "reopen":
 			return runReopenCommand(args[1:], stdout, stderr)
+		case "add":
+			return runAddCommand(args[1:], stdout, stderr)
+		case "edit":
+			return runEditCommand(args[1:], stdout, stderr)
+		case "link":
+			return runLinkCommand(args[1:], stdout, stderr)
+		case "unlink":
+			return runUnlinkCommand(args[1:], stdout, stderr)
 		case "help":
 			return runHelpCommand(args[1:], stdout)
 		}
@@ -131,6 +139,10 @@ func writeTopLevelUsage(w io.Writer) {
 	fmt.Fprintln(w, "  dagim show [--json] FILE NODE")
 	fmt.Fprintln(w, "  dagim complete [--json] FILE NODE")
 	fmt.Fprintln(w, "  dagim reopen [--dry-run] [--json] FILE NODE")
+	fmt.Fprintln(w, "  dagim add [--parent NODE]... [--child NODE]... [--json] FILE --text TEXT")
+	fmt.Fprintln(w, "  dagim edit [--json] FILE NODE --text TEXT")
+	fmt.Fprintln(w, "  dagim link [--json] FILE PARENT CHILD")
+	fmt.Fprintln(w, "  dagim unlink [--json] FILE PARENT CHILD")
 	fmt.Fprintln(w, "  dagim --check [--json] FILE")
 	fmt.Fprintln(w, "  dagim --version")
 	fmt.Fprintln(w)

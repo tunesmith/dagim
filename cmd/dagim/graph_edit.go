@@ -1,0 +1,319 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"strings"
+
+	"github.com/tunesmith/dagim/internal/dagimfile"
+	"github.com/tunesmith/dagim/internal/graph"
+)
+
+type edgeOutput struct {
+	Parent string `json:"parent"`
+	Child  string `json:"child"`
+}
+
+type graphEditOutput struct {
+	SchemaVersion     int          `json:"schema_version"`
+	Action            string       `json:"action"`
+	Changed           bool         `json:"changed"`
+	Node              *nodeOutput  `json:"node"`
+	PreviousText      *string      `json:"previous_text"`
+	EdgesAdded        []edgeOutput `json:"edges_added"`
+	EdgesRemoved      []edgeOutput `json:"edges_removed"`
+	CompletionChanged []nodeOutput `json:"completion_changed"`
+	NewlyReady        []nodeOutput `json:"newly_ready"`
+	NewlyBlocked      []nodeOutput `json:"newly_blocked"`
+	Stats             statsOutput  `json:"stats"`
+}
+
+type stringListFlag []string
+
+func (f *stringListFlag) String() string {
+	return strings.Join(*f, ",")
+}
+
+func (f *stringListFlag) Set(value string) error {
+	*f = append(*f, value)
+	return nil
+}
+
+func runAddCommand(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("dagim add", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	jsonOutput := fs.Bool("json", false, "output JSON")
+	text := fs.String("text", "", "node text")
+	var parents, children stringListFlag
+	fs.Var(&parents, "parent", "parent node ID (repeatable)")
+	fs.Var(&children, "child", "child node ID (repeatable)")
+	fs.Usage = func() { writeAddUsage(fs.Output()) }
+	valueFlags := map[string]bool{"text": true, "parent": true, "child": true}
+	if err := fs.Parse(flagsFirst(args, valueFlags)); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+	if fs.NArg() != 1 {
+		fs.Usage()
+		return fmt.Errorf("add expects exactly one file")
+	}
+	if strings.TrimSpace(*text) == "" {
+		return fmt.Errorf("add requires --text")
+	}
+	return addNode(fs.Arg(0), *text, parents, children, *jsonOutput, stdout)
+}
+
+func runEditCommand(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("dagim edit", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	jsonOutput := fs.Bool("json", false, "output JSON")
+	text := fs.String("text", "", "new node text")
+	fs.Usage = func() { writeEditUsage(fs.Output()) }
+	if err := fs.Parse(flagsFirst(args, map[string]bool{"text": true})); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+	if fs.NArg() != 2 {
+		fs.Usage()
+		return fmt.Errorf("edit expects a file and node ID")
+	}
+	if strings.TrimSpace(*text) == "" {
+		return fmt.Errorf("edit requires --text")
+	}
+	return editNode(fs.Arg(0), graph.NodeID(fs.Arg(1)), *text, *jsonOutput, stdout)
+}
+
+func runLinkCommand(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("dagim link", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	jsonOutput := fs.Bool("json", false, "output JSON")
+	fs.Usage = func() { writeLinkUsage(fs.Output()) }
+	if err := fs.Parse(flagsFirst(args, nil)); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+	if fs.NArg() != 3 {
+		fs.Usage()
+		return fmt.Errorf("link expects a file, parent ID, and child ID")
+	}
+	return editEdge(fs.Arg(0), graph.NodeID(fs.Arg(1)), graph.NodeID(fs.Arg(2)), true, *jsonOutput, stdout)
+}
+
+func runUnlinkCommand(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("dagim unlink", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	jsonOutput := fs.Bool("json", false, "output JSON")
+	fs.Usage = func() { writeUnlinkUsage(fs.Output()) }
+	if err := fs.Parse(flagsFirst(args, nil)); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+	if fs.NArg() != 3 {
+		fs.Usage()
+		return fmt.Errorf("unlink expects a file, parent ID, and child ID")
+	}
+	return editEdge(fs.Arg(0), graph.NodeID(fs.Arg(1)), graph.NodeID(fs.Arg(2)), false, *jsonOutput, stdout)
+}
+
+func addNode(path, text string, parents, children []string, jsonOutput bool, stdout io.Writer) error {
+	g, err := dagimfile.LoadOrEmpty(path)
+	if err != nil {
+		return err
+	}
+	before := g.Clone()
+	id, err := g.AddNode(text)
+	if err != nil {
+		return err
+	}
+	edges := make([]edgeOutput, 0, len(parents)+len(children))
+	for _, parent := range parents {
+		parentID := graph.NodeID(parent)
+		if err := addEdgeForEditing(g, parentID, id); err != nil {
+			return err
+		}
+		edges = append(edges, edgeOutput{Parent: string(parentID), Child: string(id)})
+	}
+	for _, child := range children {
+		childID := graph.NodeID(child)
+		if err := addEdgeForEditing(g, id, childID); err != nil {
+			return err
+		}
+		edges = append(edges, edgeOutput{Parent: string(id), Child: string(childID)})
+	}
+	if err := g.Validate(); err != nil {
+		return err
+	}
+	if err := dagimfile.SaveAtomic(path, g); err != nil {
+		return err
+	}
+	node, _ := g.Node(id)
+	result := newGraphEditOutput("add", before, g)
+	summary := summarizeNode(g, node)
+	result.Node = &summary
+	result.Changed = true
+	result.EdgesAdded = edges
+	return writeGraphEditResult(stdout, result, jsonOutput)
+}
+
+func editNode(path string, id graph.NodeID, text string, jsonOutput bool, stdout io.Writer) error {
+	g, err := dagimfile.Load(path)
+	if err != nil {
+		return err
+	}
+	before := g.Clone()
+	oldNode, ok := g.Node(id)
+	if !ok {
+		return fmt.Errorf("%w: %s", graph.ErrUnknownNode, id)
+	}
+	if err := g.EditNodeText(id, text); err != nil {
+		return err
+	}
+	node, _ := g.Node(id)
+	changed := oldNode.Text != node.Text
+	if changed {
+		if err := dagimfile.SaveAtomic(path, g); err != nil {
+			return err
+		}
+	}
+	result := newGraphEditOutput("edit", before, g)
+	summary := summarizeNode(g, node)
+	result.Node = &summary
+	result.PreviousText = &oldNode.Text
+	result.Changed = changed
+	return writeGraphEditResult(stdout, result, jsonOutput)
+}
+
+func editEdge(path string, parent, child graph.NodeID, add, jsonOutput bool, stdout io.Writer) error {
+	g, err := dagimfile.Load(path)
+	if err != nil {
+		return err
+	}
+	before := g.Clone()
+	edge := edgeOutput{Parent: string(parent), Child: string(child)}
+	action := "unlink"
+	if add {
+		action = "link"
+		if err := addEdgeForEditing(g, parent, child); err != nil {
+			return err
+		}
+	} else if err := g.RemoveEdge(parent, child); err != nil {
+		return err
+	}
+	if err := g.Validate(); err != nil {
+		return err
+	}
+	if err := dagimfile.SaveAtomic(path, g); err != nil {
+		return err
+	}
+	result := newGraphEditOutput(action, before, g)
+	result.Changed = true
+	if add {
+		result.EdgesAdded = append(result.EdgesAdded, edge)
+	} else {
+		result.EdgesRemoved = append(result.EdgesRemoved, edge)
+	}
+	return writeGraphEditResult(stdout, result, jsonOutput)
+}
+
+func addEdgeForEditing(g *graph.Graph, parent, child graph.NodeID) error {
+	if err := g.AddEdge(parent, child); err != nil {
+		return err
+	}
+	parentNode, _ := g.Node(parent)
+	childNode, _ := g.Node(child)
+	if childNode.Complete && !parentNode.Complete {
+		_, err := g.MarkIncompleteCascade(child)
+		return err
+	}
+	return nil
+}
+
+func newGraphEditOutput(action string, before, after *graph.Graph) graphEditOutput {
+	transitions := compareGraphStates(before, after)
+	return graphEditOutput{
+		SchemaVersion:     outputSchemaVersion,
+		Action:            action,
+		Node:              nil,
+		PreviousText:      nil,
+		EdgesAdded:        make([]edgeOutput, 0),
+		EdgesRemoved:      make([]edgeOutput, 0),
+		CompletionChanged: transitions.CompletionChanged,
+		NewlyReady:        transitions.NewlyReady,
+		NewlyBlocked:      transitions.NewlyBlocked,
+		Stats:             makeStatsOutput(after.Stats()),
+	}
+}
+
+func writeGraphEditResult(w io.Writer, result graphEditOutput, jsonOutput bool) error {
+	if jsonOutput {
+		return writeJSON(w, result)
+	}
+	switch result.Action {
+	case "add":
+		writeMutationNodes(w, "added", []nodeOutput{*result.Node})
+	case "edit":
+		if result.Changed {
+			fmt.Fprintf(w, "edited: %s\n", result.Node.ID)
+			fmt.Fprintf(w, "previous text: %s\n", *result.PreviousText)
+			fmt.Fprintf(w, "text: %s\n", result.Node.Text)
+		} else {
+			fmt.Fprintf(w, "no change: %s already has that text\n", result.Node.ID)
+		}
+	case "link":
+		writeEdges(w, "linked", result.EdgesAdded)
+	case "unlink":
+		writeEdges(w, "unlinked", result.EdgesRemoved)
+	}
+	if result.Action == "add" && len(result.EdgesAdded) > 0 {
+		writeEdges(w, "linked", result.EdgesAdded)
+	}
+	if len(result.CompletionChanged) > 0 {
+		writeMutationNodes(w, "reopened", result.CompletionChanged)
+	}
+	if len(result.NewlyReady) > 0 {
+		writeMutationNodes(w, "newly ready", result.NewlyReady)
+	}
+	if len(result.NewlyBlocked) > 0 {
+		writeMutationNodes(w, "newly blocked", result.NewlyBlocked)
+	}
+	return nil
+}
+
+func writeEdges(w io.Writer, label string, edges []edgeOutput) {
+	fmt.Fprintf(w, "%s:\n", label)
+	for _, edge := range edges {
+		fmt.Fprintf(w, "  %s -> %s\n", edge.Parent, edge.Child)
+	}
+}
+
+func writeAddUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: dagim add [--parent NODE]... [--child NODE]... [--json] FILE --text TEXT")
+	fmt.Fprintln(w, "Add a node, optionally linking existing parents and children.")
+}
+
+func writeEditUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: dagim edit [--json] FILE NODE --text TEXT")
+	fmt.Fprintln(w, "Edit node text without changing its stable ID or relationships.")
+}
+
+func writeLinkUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: dagim link [--json] FILE PARENT CHILD")
+	fmt.Fprintln(w, "Link existing nodes, reopening invalidated completed work if needed.")
+}
+
+func writeUnlinkUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: dagim unlink [--json] FILE PARENT CHILD")
+	fmt.Fprintln(w, "Remove an edge between existing nodes.")
+}

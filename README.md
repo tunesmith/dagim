@@ -113,6 +113,28 @@ dagim reopen /tmp/gumbo.dagim prepare-rice-cooker-press-start
 `complete` rejects nodes with incomplete parents. `reopen` preserves completion
 validity by also reopening completed descendants.
 
+Edit graph structure without opening the TUI:
+
+```sh
+# Add a node with existing parents and children; flags are repeatable
+dagim add /tmp/gumbo.dagim \
+  --text "Toast spices" \
+  --parent drain-2-cans-total-diced-canned-tomatoes \
+  --child set-spice-bowl-next-gumbo-pot
+
+# Edit text without changing the generated node ID or its links
+dagim edit /tmp/gumbo.dagim toast-spices --text "Toast the measured spices"
+
+# Link and unlink existing nodes; arguments are always PARENT CHILD
+dagim unlink /tmp/gumbo.dagim toast-spices set-spice-bowl-next-gumbo-pot
+dagim link /tmp/gumbo.dagim toast-spices set-spice-bowl-next-gumbo-pot
+```
+
+`add` validates all requested links before saving. `link` rejects cycles and,
+like the TUI, reopens a completed child and its completed descendants when an
+incomplete parent is added. To insert a new node between an existing `A -> B`
+edge, add `A -> new -> B`, then explicitly unlink `A -> B`.
+
 Add `--json` to any scriptable command for structured output. Mutation results
 include changed, newly ready, and newly blocked nodes. Flags may appear before or
 after positional arguments:

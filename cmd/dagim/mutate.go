@@ -23,6 +23,12 @@ type mutationOutput struct {
 	Stats         statsOutput  `json:"stats"`
 }
 
+type graphTransitions struct {
+	CompletionChanged []nodeOutput
+	NewlyReady        []nodeOutput
+	NewlyBlocked      []nodeOutput
+}
+
 func runCompleteCommand(args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("dagim complete", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -111,12 +117,28 @@ func completionMutationOutput(action string, dryRun bool, before, after *graph.G
 		NewlyBlocked:  make([]nodeOutput, 0),
 		Stats:         makeStatsOutput(after.Stats()),
 	}
+	transitions := compareGraphStates(before, after)
+	result.Changed = transitions.CompletionChanged
+	result.NewlyReady = transitions.NewlyReady
+	result.NewlyBlocked = transitions.NewlyBlocked
+	return result, nil
+}
+
+func compareGraphStates(before, after *graph.Graph) graphTransitions {
+	result := graphTransitions{
+		CompletionChanged: make([]nodeOutput, 0),
+		NewlyReady:        make([]nodeOutput, 0),
+		NewlyBlocked:      make([]nodeOutput, 0),
+	}
 	for _, node := range after.Nodes() {
-		beforeNode, _ := before.Node(node.ID)
-		beforeSummary := summarizeNode(before, beforeNode)
 		afterSummary := summarizeNode(after, node)
+		beforeNode, existed := before.Node(node.ID)
+		if !existed {
+			continue
+		}
+		beforeSummary := summarizeNode(before, beforeNode)
 		if beforeNode.Complete != node.Complete {
-			result.Changed = append(result.Changed, afterSummary)
+			result.CompletionChanged = append(result.CompletionChanged, afterSummary)
 		}
 		if beforeSummary.State != "ready" && afterSummary.State == "ready" {
 			result.NewlyReady = append(result.NewlyReady, afterSummary)
@@ -125,7 +147,7 @@ func completionMutationOutput(action string, dryRun bool, before, after *graph.G
 			result.NewlyBlocked = append(result.NewlyBlocked, afterSummary)
 		}
 	}
-	return result, nil
+	return result
 }
 
 func makeStatsOutput(stats graph.Stats) statsOutput {

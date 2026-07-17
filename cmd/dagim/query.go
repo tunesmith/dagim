@@ -179,6 +179,14 @@ func runHelpCommand(args []string, stdout io.Writer) error {
 		writeCompleteUsage(stdout)
 	case "reopen":
 		writeReopenUsage(stdout)
+	case "add":
+		writeAddUsage(stdout)
+	case "edit":
+		writeEditUsage(stdout)
+	case "link":
+		writeLinkUsage(stdout)
+	case "unlink":
+		writeUnlinkUsage(stdout)
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
