@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+usage() {
+  echo "Usage: scripts/release-check vX.Y.Z" >&2
+}
+
+fail() {
+  echo "release-check: $*" >&2
+  exit 1
+}
+
+if [[ $# -ne 1 ]]; then
+  usage
+  exit 2
+fi
+
+release_version="$1"
+if [[ ! "$release_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+  fail "version must look like v1.2.0 or v1.2.0-rc.1"
+fi
+
+repository_root="$(git rev-parse --show-toplevel 2>/dev/null)" ||
+  fail "run this command from a Dagim Git checkout"
+cd "$repository_root"
+
+if [[ -n "$(git status --porcelain)" ]]; then
+  fail "working tree must be clean"
+fi
+
+if git rev-parse --quiet --verify "refs/tags/$release_version" >/dev/null; then
+  fail "tag $release_version already exists"
+fi
+
+set +e
+git ls-remote --exit-code --tags origin "refs/tags/$release_version" >/dev/null 2>&1
+remote_tag_status=$?
+set -e
+case "$remote_tag_status" in
+  0)
+    fail "tag $release_version already exists on origin"
+    ;;
+  2)
+    ;;
+  *)
+    fail "could not check whether tag $release_version exists on origin"
+    ;;
+esac
+
+changelog_version="${release_version#v}"
+if ! grep -Eq "^## ${changelog_version//./\\.} \([0-9]{4}-[0-9]{2}-[0-9]{2}\)$" CHANGELOG.md; then
+  fail "CHANGELOG.md needs a dated '## $changelog_version (YYYY-MM-DD)' heading"
+fi
+
+if grep -Fq "## $changelog_version (unreleased)" CHANGELOG.md; then
+  fail "CHANGELOG.md still marks $changelog_version as unreleased"
+fi
+
+release_tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/dagim-release-check.XXXXXX")"
+trap 'rm -rf "$release_tmp_dir"' EXIT
+export GOCACHE="$release_tmp_dir/go-cache"
+
+echo "==> Checking whitespace"
+git diff --check
+
+echo "==> Running tests"
+go test -count=1 ./...
+
+echo "==> Running race tests"
+go test -race ./...
+
+echo "==> Running vet"
+go vet ./...
+
+echo "==> Verifying release version injection"
+go build \
+  -ldflags "-X main.version=$release_version" \
+  -o "$release_tmp_dir/dagim" \
+  ./cmd/dagim
+
+actual_version="$("$release_tmp_dir/dagim" --version)"
+expected_version="dagim $release_version"
+if [[ "$actual_version" != "$expected_version" ]]; then
+  fail "expected '$expected_version', got '$actual_version'"
+fi
+
+echo "release-check: $release_version passed"
