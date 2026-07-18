@@ -14,3 +14,7 @@ go vet ./...
 ```
 
 Keep changes focused and include tests for behavior changes when practical.
+
+Repository-specific guidance for coding agents is in `AGENTS.md`. For a public
+release, follow `docs/releasing.md` and run the complete non-publishing
+preflight documented there.
