@@ -232,8 +232,93 @@ func TestUnlinkCommandReportsNewlyReadyNode(t *testing.T) {
 	}
 }
 
+func TestDeleteDryRunReportsNodeEdgesAndNewlyReadyWithoutSaving(t *testing.T) {
+	path := writeTestGraph(t)
+	before := readTestFile(t, path)
+
+	var stdout, stderr bytes.Buffer
+	args := []string{"delete", path, "cook-dinner", "--dry-run", "--json"}
+	if err := runWithIO(args, &stdout, &stderr); err != nil {
+		t.Fatalf("runWithIO delete --dry-run: %v", err)
+	}
+	var result graphEditOutput
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("unmarshal delete JSON: %v\n%s", err, stdout.String())
+	}
+	if result.Action != "delete" || !result.DryRun || !result.Changed {
+		t.Fatalf("delete metadata = %#v", result)
+	}
+	if result.Node == nil || result.Node.ID != "cook-dinner" || result.Node.State != "blocked" {
+		t.Fatalf("deleted node = %#v", result.Node)
+	}
+	wantEdges := []edgeOutput{
+		{Parent: "prepare-rice", Child: "cook-dinner"},
+		{Parent: "chop-vegetables", Child: "cook-dinner"},
+		{Parent: "cook-dinner", Child: "serve-dinner"},
+	}
+	if !reflect.DeepEqual(result.EdgesRemoved, wantEdges) {
+		t.Fatalf("edges_removed = %#v, want %#v", result.EdgesRemoved, wantEdges)
+	}
+	if got, want := outputIDs(result.NewlyReady), []string{"serve-dinner"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("newly_ready = %v, want %v", got, want)
+	}
+	if result.Stats.Nodes != 3 || result.Stats.Edges != 0 || result.Stats.Ready != 2 {
+		t.Fatalf("preview stats = %#v", result.Stats)
+	}
+	if after := readTestFile(t, path); !bytes.Equal(after, before) {
+		t.Fatalf("delete dry run changed the file")
+	}
+}
+
+func TestDeleteCommandSavesRemoval(t *testing.T) {
+	path := writeTestGraph(t)
+
+	var stdout, stderr bytes.Buffer
+	if err := runWithIO([]string{"delete", path, "cook-dinner"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runWithIO delete: %v", err)
+	}
+	for _, want := range []string{
+		"deleted:",
+		"blocked\tcook-dinner\tCook dinner",
+		"unlinked:",
+		"prepare-rice -> cook-dinner",
+		"cook-dinner -> serve-dinner",
+		"newly ready:",
+		"ready\tserve-dinner\tServe dinner",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("delete output missing %q:\n%s", want, stdout.String())
+		}
+	}
+
+	g, err := dagimfile.Load(path)
+	if err != nil {
+		t.Fatalf("load graph after delete: %v", err)
+	}
+	if g.HasNode("cook-dinner") {
+		t.Fatalf("cook-dinner still exists after delete")
+	}
+	if got := len(g.Edges()); got != 0 {
+		t.Fatalf("edges after delete = %d, want 0", got)
+	}
+}
+
+func TestDeleteUnknownNodeLeavesFileUnchanged(t *testing.T) {
+	path := writeTestGraph(t)
+	before := readTestFile(t, path)
+
+	var stdout, stderr bytes.Buffer
+	err := runWithIO([]string{"delete", path, "missing"}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "unknown node") {
+		t.Fatalf("delete unknown error = %v", err)
+	}
+	if after := readTestFile(t, path); !bytes.Equal(after, before) {
+		t.Fatalf("failed delete changed the file")
+	}
+}
+
 func TestGraphEditCommandHelp(t *testing.T) {
-	for _, command := range []string{"add", "edit", "link", "unlink"} {
+	for _, command := range []string{"add", "edit", "link", "unlink", "delete"} {
 		var stdout, stderr bytes.Buffer
 		if err := runWithIO([]string{"help", command}, &stdout, &stderr); err != nil {
 			t.Fatalf("help %s: %v", command, err)

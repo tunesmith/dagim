@@ -51,6 +51,8 @@ func runWithIO(args []string, stdout, stderr io.Writer) error {
 			return runLinkCommand(args[1:], stdout, stderr)
 		case "unlink":
 			return runUnlinkCommand(args[1:], stdout, stderr)
+		case "delete":
+			return runDeleteCommand(args[1:], stdout, stderr)
 		case "help":
 			return runHelpCommand(args[1:], stdout)
 		}
@@ -143,6 +145,7 @@ func writeTopLevelUsage(w io.Writer) {
 	fmt.Fprintln(w, "  dagim edit [--json] FILE NODE --text TEXT")
 	fmt.Fprintln(w, "  dagim link [--json] FILE PARENT CHILD")
 	fmt.Fprintln(w, "  dagim unlink [--json] FILE PARENT CHILD")
+	fmt.Fprintln(w, "  dagim delete [--dry-run] [--json] FILE NODE")
 	fmt.Fprintln(w, "  dagim --check [--json] FILE")
 	fmt.Fprintln(w, "  dagim --version")
 	fmt.Fprintln(w)

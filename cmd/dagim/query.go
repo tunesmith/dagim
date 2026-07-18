@@ -187,6 +187,8 @@ func runHelpCommand(args []string, stdout io.Writer) error {
 		writeLinkUsage(stdout)
 	case "unlink":
 		writeUnlinkUsage(stdout)
+	case "delete":
+		writeDeleteUsage(stdout)
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}

@@ -21,6 +21,7 @@ type edgeOutput struct {
 type graphEditOutput struct {
 	SchemaVersion     int          `json:"schema_version"`
 	Action            string       `json:"action"`
+	DryRun            bool         `json:"dry_run"`
 	Changed           bool         `json:"changed"`
 	Node              *nodeOutput  `json:"node"`
 	PreviousText      *string      `json:"previous_text"`
@@ -127,6 +128,25 @@ func runUnlinkCommand(args []string, stdout, stderr io.Writer) error {
 	return editEdge(fs.Arg(0), graph.NodeID(fs.Arg(1)), graph.NodeID(fs.Arg(2)), false, *jsonOutput, stdout)
 }
 
+func runDeleteCommand(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("dagim delete", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	jsonOutput := fs.Bool("json", false, "output JSON")
+	dryRun := fs.Bool("dry-run", false, "preview without saving")
+	fs.Usage = func() { writeDeleteUsage(fs.Output()) }
+	if err := fs.Parse(flagsFirst(args, nil)); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+	if fs.NArg() != 2 {
+		fs.Usage()
+		return fmt.Errorf("delete expects a file and node ID")
+	}
+	return deleteNode(fs.Arg(0), graph.NodeID(fs.Arg(1)), *dryRun, *jsonOutput, stdout)
+}
+
 func addNode(path, text string, parents, children []string, jsonOutput bool, stdout io.Writer) error {
 	g, err := dagimfile.LoadOrEmpty(path)
 	if err != nil {
@@ -227,6 +247,42 @@ func editEdge(path string, parent, child graph.NodeID, add, jsonOutput bool, std
 	return writeGraphEditResult(stdout, result, jsonOutput)
 }
 
+func deleteNode(path string, id graph.NodeID, dryRun, jsonOutput bool, stdout io.Writer) error {
+	g, err := dagimfile.Load(path)
+	if err != nil {
+		return err
+	}
+	before := g.Clone()
+	node, ok := g.Node(id)
+	if !ok {
+		return fmt.Errorf("%w: %s", graph.ErrUnknownNode, id)
+	}
+	deleted := summarizeNode(g, node)
+	edges := make([]edgeOutput, 0)
+	for _, edge := range g.Edges() {
+		if edge.Parent == id || edge.Child == id {
+			edges = append(edges, edgeOutput{Parent: string(edge.Parent), Child: string(edge.Child)})
+		}
+	}
+	if err := g.DeleteNode(id); err != nil {
+		return err
+	}
+	if err := g.Validate(); err != nil {
+		return err
+	}
+	result := newGraphEditOutput("delete", before, g)
+	result.DryRun = dryRun
+	result.Changed = true
+	result.Node = &deleted
+	result.EdgesRemoved = edges
+	if !dryRun {
+		if err := dagimfile.SaveAtomic(path, g); err != nil {
+			return err
+		}
+	}
+	return writeGraphEditResult(stdout, result, jsonOutput)
+}
+
 func addEdgeForEditing(g *graph.Graph, parent, child graph.NodeID) error {
 	if err := g.AddEdge(parent, child); err != nil {
 		return err
@@ -275,9 +331,22 @@ func writeGraphEditResult(w io.Writer, result graphEditOutput, jsonOutput bool) 
 		writeEdges(w, "linked", result.EdgesAdded)
 	case "unlink":
 		writeEdges(w, "unlinked", result.EdgesRemoved)
+	case "delete":
+		label := "deleted"
+		if result.DryRun {
+			label = "would delete"
+		}
+		writeMutationNodes(w, label, []nodeOutput{*result.Node})
 	}
 	if result.Action == "add" && len(result.EdgesAdded) > 0 {
 		writeEdges(w, "linked", result.EdgesAdded)
+	}
+	if result.Action == "delete" && len(result.EdgesRemoved) > 0 {
+		label := "unlinked"
+		if result.DryRun {
+			label = "would unlink"
+		}
+		writeEdges(w, label, result.EdgesRemoved)
 	}
 	if len(result.CompletionChanged) > 0 {
 		writeMutationNodes(w, "reopened", result.CompletionChanged)
@@ -316,4 +385,9 @@ func writeLinkUsage(w io.Writer) {
 func writeUnlinkUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: dagim unlink [--json] FILE PARENT CHILD")
 	fmt.Fprintln(w, "Remove an edge between existing nodes.")
+}
+
+func writeDeleteUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: dagim delete [--dry-run] [--json] FILE NODE")
+	fmt.Fprintln(w, "Delete a node and its incident edges, optionally previewing the result.")
 }

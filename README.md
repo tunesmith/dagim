@@ -128,12 +128,17 @@ dagim edit /tmp/gumbo.dagim toast-spices --text "Toast the measured spices"
 # Link and unlink existing nodes; arguments are always PARENT CHILD
 dagim unlink /tmp/gumbo.dagim toast-spices set-spice-bowl-next-gumbo-pot
 dagim link /tmp/gumbo.dagim toast-spices set-spice-bowl-next-gumbo-pot
+
+# Preview, then delete a node and all of its incident edges
+dagim delete /tmp/gumbo.dagim toast-spices --dry-run
+dagim delete /tmp/gumbo.dagim toast-spices
 ```
 
 `add` validates all requested links before saving. `link` rejects cycles and,
 like the TUI, reopens a completed child and its completed descendants when an
 incomplete parent is added. To insert a new node between an existing `A -> B`
-edge, add `A -> new -> B`, then explicitly unlink `A -> B`.
+edge, add `A -> new -> B`, then explicitly unlink `A -> B`. `delete --dry-run`
+reports the node, incident edges, and resulting frontier without saving.
 
 Add `--json` to any scriptable command for structured output. Mutation results
 include changed, newly ready, and newly blocked nodes. Flags may appear before or
