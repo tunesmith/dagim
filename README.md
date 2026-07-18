@@ -149,6 +149,9 @@ dagim ready examples/gumbo.dagim --json
 dagim list --state ready --json examples/gumbo.dagim
 ```
 
+The versioned output and compatibility policy are documented in
+[CLI JSON Output](docs/cli-json.md).
+
 During development, run these commands directly from a checkout without
 installing the binary:
 
