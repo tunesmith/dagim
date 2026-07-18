@@ -74,7 +74,89 @@ dagim examples/gumbo.dagim
 Check a graph without opening the TUI:
 
 ```sh
-dagim --check examples/gumbo.dagim
+dagim check examples/gumbo.dagim
+```
+
+`dagim --check FILE` remains available as a compatibility alias.
+
+## Scriptable Commands
+
+Read graph state without opening the TUI:
+
+```sh
+# Incomplete nodes whose parents are complete
+dagim ready examples/gumbo.dagim
+
+# All blocked nodes and their incomplete parents
+dagim list examples/gumbo.dagim --state blocked
+
+# One node with its state, blockers, parents, and children
+dagim show examples/gumbo.dagim slice-andouille-sausage
+```
+
+Advance completion state without opening the TUI:
+
+```sh
+# Work on a copy of the example
+cp examples/gumbo.dagim /tmp/gumbo.dagim
+
+# Complete a ready node and report what became ready
+dagim complete /tmp/gumbo.dagim prepare-rice-cooker-press-start
+
+# Preview the completion state a reopen would clear
+dagim reopen /tmp/gumbo.dagim prepare-rice-cooker-press-start --dry-run
+
+# Reopen a node and cascade through its completed descendants
+dagim reopen /tmp/gumbo.dagim prepare-rice-cooker-press-start
+```
+
+`complete` rejects nodes with incomplete parents. `reopen` preserves completion
+validity by also reopening completed descendants.
+
+Edit graph structure without opening the TUI:
+
+```sh
+# Add a node with existing parents and children; flags are repeatable
+dagim add /tmp/gumbo.dagim \
+  --text "Toast spices" \
+  --parent drain-2-cans-total-diced-canned-tomatoes \
+  --child set-spice-bowl-next-gumbo-pot
+
+# Edit text without changing the generated node ID or its links
+dagim edit /tmp/gumbo.dagim toast-spices --text "Toast the measured spices"
+
+# Link and unlink existing nodes; arguments are always PARENT CHILD
+dagim unlink /tmp/gumbo.dagim toast-spices set-spice-bowl-next-gumbo-pot
+dagim link /tmp/gumbo.dagim toast-spices set-spice-bowl-next-gumbo-pot
+
+# Preview, then delete a node and all of its incident edges
+dagim delete /tmp/gumbo.dagim toast-spices --dry-run
+dagim delete /tmp/gumbo.dagim toast-spices
+```
+
+`add` validates all requested links before saving. `link` rejects cycles and,
+like the TUI, reopens a completed child and its completed descendants when an
+incomplete parent is added. To insert a new node between an existing `A -> B`
+edge, add `A -> new -> B`, then explicitly unlink `A -> B`. `delete --dry-run`
+reports the node, incident edges, and resulting frontier without saving.
+
+Add `--json` to any scriptable command for structured output. Mutation results
+include changed, newly ready, and newly blocked nodes. Flags may appear before or
+after positional arguments:
+
+```sh
+dagim ready examples/gumbo.dagim --json
+dagim list --state ready --json examples/gumbo.dagim
+```
+
+The versioned output and compatibility policy are documented in
+[CLI JSON Output](docs/cli-json.md).
+
+During development, run these commands directly from a checkout without
+installing the binary:
+
+```sh
+go run ./cmd/dagim ready examples/gumbo.dagim
 ```
 
 ## File Format
