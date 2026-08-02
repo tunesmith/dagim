@@ -65,6 +65,11 @@ dagim prevents cycles by rejecting links that would make an upstream node a
 child, or a downstream node a parent. Toggling a node undone also toggles its
 completed descendants undone, so completion state stays dependency-valid.
 
+The TUI automatically reloads valid changes made to the file by another
+process. An external reload clears the TUI's undo history. Invalid external
+contents stay on disk and are reported instead of replacing the current view;
+the TUI also refuses to autosave over a file that changed unexpectedly.
+
 Open an example graph:
 
 ```sh

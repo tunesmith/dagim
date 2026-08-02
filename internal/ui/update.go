@@ -12,6 +12,9 @@ import (
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case diskCheckMsg:
+		m = m.refreshFromDiskNow()
+		return m, scheduleDiskCheck()
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -21,6 +24,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		oldMode := m.mode
 		m.message = ""
+		m = m.refreshFromDiskNow()
 		switch msg.String() {
 		case "ctrl+c":
 			return m, tea.Quit

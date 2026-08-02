@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.2.0 (2026-08-01)
+
+### Added
+
+- Automatic TUI reloads when another process changes the open Dagim file.
+
+### Changed
+
+- TUI autosaves now refuse to overwrite unexpected external file changes.
+- External reloads preserve the focused node when possible, clear stale undo
+  history, and leave invalid external contents untouched with an error message.
+
+### Compatibility
+
+- The `.dagim` file format remains `# dagim v1`.
+- The CLI JSON schema remains version 1 with no output contract changes.
+
 ## 1.1.0 (2026-07-17)
 
 ### Added
