@@ -74,6 +74,10 @@ type Model struct {
 	path string
 	g    *graph.Graph
 
+	diskVersion      diskVersion
+	seenDiskVersion  diskVersion
+	diskVersionKnown bool
+
 	mode     mode
 	previous mode
 	current  graph.NodeID
@@ -114,7 +118,27 @@ func New(path string, g *graph.Graph) Model {
 		mode:  modeNode,
 		input: input,
 	}
-	if nodes := g.Nodes(); len(nodes) > 0 {
+	check := readDisk(path)
+	switch {
+	case check.err != nil:
+		m.message = "reload failed: " + check.err.Error()
+	case !check.version.exists:
+		m.diskVersion = check.version
+		m.seenDiskVersion = check.version
+		m.diskVersionKnown = true
+	default:
+		latest, err := dagimfile.Parse(string(check.data))
+		if err != nil {
+			m.seenDiskVersion = check.version
+			m.message = "external change is invalid: " + err.Error()
+		} else {
+			m.g = latest
+			m.diskVersion = check.version
+			m.seenDiskVersion = check.version
+			m.diskVersionKnown = true
+		}
+	}
+	if nodes := m.g.Nodes(); len(nodes) > 0 {
 		m.current = nodes[0].ID
 		m.mode = modeReady
 	}
@@ -127,7 +151,7 @@ func Run(path string, g *graph.Graph) error {
 }
 
 func (m Model) Init() tea.Cmd {
-	return textinput.Blink
+	return tea.Batch(textinput.Blink, scheduleDiskCheck())
 }
 
 func (m Model) setPrompt(action promptAction, title, value string) (Model, tea.Cmd) {
@@ -541,11 +565,20 @@ func (m Model) autosave() Model {
 		m.dirty = true
 		return m
 	}
+	if err := m.diskStillCurrent(); err != nil {
+		m.message = "autosave blocked: " + err.Error()
+		m.dirty = true
+		return m
+	}
+	serialized := dagimfile.Serialize(m.g)
 	if err := dagimfile.SaveAtomic(m.path, m.g); err != nil {
 		m.message = "autosave failed: " + err.Error()
 		m.dirty = true
 		return m
 	}
+	m.diskVersion = versionForSavedGraph(serialized)
+	m.seenDiskVersion = m.diskVersion
+	m.diskVersionKnown = true
 	m.dirty = false
 	return m
 }
@@ -567,9 +600,9 @@ func (m Model) rewrite() Model {
 		return m
 	}
 	m = m.pushUndo(snapshot)
-	if err := dagimfile.SaveAtomic(m.path, m.g); err != nil {
-		m.dirty = true
-		m.message = err.Error()
+	m.dirty = true
+	m = m.autosave()
+	if m.dirty {
 		return m
 	}
 	changed := 0
@@ -578,7 +611,6 @@ func (m Model) rewrite() Model {
 			changed++
 		}
 	}
-	m.dirty = false
 	m.message = fmt.Sprintf("rewrote %s (%d IDs changed)", m.path, changed)
 	if nextCurrent, ok := mapping[current]; ok {
 		m.current = nextCurrent

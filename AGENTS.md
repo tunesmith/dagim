@@ -23,6 +23,9 @@
 ## Validation and releases
 
 - For ordinary changes, run `go test ./...` and `go vet ./...`.
+- After completing a feature and before handing it off for commit or deployment,
+  run `go build -o bin/dagim ./cmd/dagim` so `./bin/dagim` is ready for local
+  user testing and reflects the current checkout.
 - Before a release, follow `docs/releasing.md` and run
   `scripts/release-check vX.Y.Z` from a clean release commit.
 - GitHub releases are source releases. Homebrew builds the tag from source via
