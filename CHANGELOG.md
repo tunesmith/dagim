@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.1 (2026-08-02)
+
+### Fixed
+
+- Selectable TUI views now keep the highlighted Node or Order item inside the
+  visible viewport during navigation, ordering picks, undo/reset, terminal
+  resize, reload, and manual page scrolling.
+
+### Compatibility
+
+- The `.dagim` file format and CLI JSON schema remain unchanged.
+
 ## 1.3.0 (2026-08-02)
 
 ### Added

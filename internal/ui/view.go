@@ -695,11 +695,89 @@ func (m Model) renderGlobalViewport(body string) string {
 	if m.height <= 0 {
 		return body
 	}
-	footer := ""
-	if m.globalScrollMaxFor(body) > 0 {
-		footer = "PgUp/PgDn scroll    Home/End"
-	}
+	footer := m.globalViewportFooter(body)
+	m = m.ensureGlobalSelectionVisibleIn(body, footer)
 	return m.renderScrollable(body, m.viewScroll, footer)
+}
+
+func (m Model) ensureGlobalSelectionVisible() Model {
+	if !m.usesGlobalViewport() || m.height <= 0 {
+		return m
+	}
+	body := m.viewBody()
+	if m.message != "" {
+		body += "\n\n" + errorStyle.Render(m.message)
+	}
+	return m.ensureGlobalSelectionVisibleIn(body, m.globalViewportFooter(body))
+}
+
+func (m Model) ensureGlobalSelectionVisibleIn(body, footer string) Model {
+	lines := strings.Split(body, "\n")
+	bodyHeight := m.scrollBodyHeight(footer)
+	maxScroll := scrollMaxForLines(lines, bodyHeight)
+	m.viewScroll = clampInt(m.viewScroll, 0, maxScroll)
+	start, end, ok := m.globalSelectionBounds(body)
+	if !ok {
+		return m
+	}
+	if start < m.viewScroll {
+		m.viewScroll = start
+	}
+	if end > m.viewScroll+bodyHeight {
+		if end-start <= bodyHeight {
+			m.viewScroll = end - bodyHeight
+		} else {
+			m.viewScroll = start
+		}
+	}
+	m.viewScroll = clampInt(m.viewScroll, 0, maxScroll)
+	return m
+}
+
+func (m Model) globalSelectionBounds(body string) (int, int, bool) {
+	selectedHeight := 0
+	switch m.mode {
+	case modeNode:
+		items := m.relationItems()
+		if len(items) == 0 {
+			return 0, 0, false
+		}
+		item := items[clampedCursor(m.cursor, len(items))]
+		node, ok := m.g.Node(item.id)
+		if !ok {
+			return 0, 0, false
+		}
+		selectedHeight = lineCount(m.renderSelectableNode(true, node))
+	case modeOrder:
+		if m.order == nil {
+			return 0, 0, false
+		}
+		available := m.order.Available()
+		if len(available) == 0 {
+			return 0, 0, false
+		}
+		node, ok := m.g.Node(available[clampedCursor(m.cursor, len(available))])
+		if !ok {
+			return 0, 0, false
+		}
+		selectedHeight = lineCount(m.renderSelectable(true, node.Text))
+	default:
+		return 0, 0, false
+	}
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "> ") {
+			return i, minInt(len(lines), i+selectedHeight), true
+		}
+	}
+	return 0, 0, false
+}
+
+func (m Model) globalViewportFooter(body string) string {
+	if m.height > 0 && scrollMaxForLines(strings.Split(body, "\n"), m.height) > 0 {
+		return "PgUp/PgDn scroll    Home/End"
+	}
+	return ""
 }
 
 func (m Model) globalScrollMax() int {
@@ -717,10 +795,7 @@ func (m Model) globalScrollMaxFor(body string) int {
 	if m.height <= 0 {
 		return 0
 	}
-	footer := ""
-	if scrollMaxForLines(strings.Split(body, "\n"), m.height) > 0 {
-		footer = "PgUp/PgDn scroll    Home/End"
-	}
+	footer := m.globalViewportFooter(body)
 	return scrollMaxForLines(strings.Split(body, "\n"), m.scrollBodyHeight(footer))
 }
 
@@ -826,6 +901,13 @@ func clampInt(value, min, max int) int {
 		return max
 	}
 	return value
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func clampedCursor(cursor, total int) int {
