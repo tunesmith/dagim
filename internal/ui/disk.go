@@ -94,6 +94,11 @@ func (m Model) refreshFromDisk(check diskContents) Model {
 	m.cursor = clampedCursor(m.cursor, len(m.relationItems()))
 	m.readyCursor = clampedCursor(m.readyCursor, len(m.readyItems()))
 	m.leavesCursor = clampedCursor(m.leavesCursor, len(m.visibleLeaves()))
+	if m.mode == modeGraphMap {
+		m.mapHistory = nil
+		m = m.ensureGraphMapSelection()
+		m = m.ensureGraphMapVisible()
+	}
 
 	switch m.mode {
 	case modeOrder:

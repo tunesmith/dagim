@@ -193,6 +193,7 @@ can be edited later without changing identity.
 - `/`: search nodes
 - `r`: ready/top view; nodes with no uncompleted parents
 - `l`: view leaves; nodes with no children
+- `g`: open the read-only left-to-right graph map
 - `Space`: toggle done/undone
 - `u`: undo the last graph edit in the current session
 - `o`: order remaining nodes for an ephemeral sequential list
@@ -203,6 +204,16 @@ can be edited later without changing identity.
 - `W`: rewrite IDs/canonical format
 - `?`: show help
 - `q`: quit
+
+In the graph map, `h/l` follows displayed parent/child edges, `j/k` moves
+within a rank, and `t` reveals transitive edges that are hidden by default.
+Opposite horizontal movement retraces the exact edges just traversed. Inbound
+and outbound edges incident to the selected node are highlighted;
+mixed-direction junctions remain neutral while shared collinear continuations
+stay highlighted. A full-width box beneath the status line shows the selected
+node's description while `j/k` keeps its card visible in tall graphs. The
+horizontal viewport retains short inbound and outbound edge hints around the
+selected card when there is more graph in either direction.
 
 ## Etymology
 

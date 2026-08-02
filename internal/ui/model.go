@@ -31,6 +31,7 @@ const (
 	modeConfirmReset
 	modeConfirmQuit
 	modeHelp
+	modeGraphMap
 )
 
 type promptAction int
@@ -97,6 +98,12 @@ type Model struct {
 	checkScroll   int
 	viewScroll    int
 	showCompleted bool
+	mapReturn     mode
+	mapSelected   graph.NodeID
+	mapOffsetX    int
+	mapOffsetY    int
+	mapTransitive bool
+	mapHistory    []graphMapTraversal
 	undoStack     []undoSnapshot
 
 	dirty   bool

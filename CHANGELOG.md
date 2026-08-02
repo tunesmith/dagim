@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.3.0 (2026-08-02)
+
+### Added
+
+- Read-only TUI graph map on `g`, with ready nodes aligned at the left of the
+  remaining-work view, parent/child and within-column navigation, and optional
+  completed history.
+- Graph maps hide diagnosed transitive edges by default with a `t` toggle,
+  highlight inbound and outbound edges incident to the selected node, and
+  prefer nearby ranks for horizontal navigation.
+- Opposite horizontal navigation retraces exact traversal history, and mixed
+  junctions remain neutral instead of coloring unrelated edge arms while
+  selected collinear continuations resume highlighting past the junction.
+- A full-width selected-node inspector wraps long descriptions above the graph
+  viewport while vertical navigation keeps the selected card visible.
+- Horizontal graph navigation retains edge context on both sides of the
+  selected card instead of aligning its border directly with the viewport.
+
+### Compatibility
+
+- The `.dagim` file format and CLI JSON schema remain unchanged.
+
 ## 1.2.0 (2026-08-01)
 
 ### Added
