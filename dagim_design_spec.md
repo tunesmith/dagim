@@ -482,6 +482,13 @@ Primary views:
 
 When opening a non-empty graph, the TUI should start in the ready view. Empty files should start in the empty node state so the first action is still `a` to add a node.
 
+Every view with a highlighted selectable item must keep that item inside the
+visible terminal viewport. Cursor movement, content changes, undo/reset,
+external reload, terminal resize, and manual page scrolling must adjust or
+constrain the view camera rather than allowing the highlight to disappear.
+When an individual wrapped item is taller than the viewport, its selection
+marker must remain visible.
+
 The core capture loop should emphasize defining graph relationships while ideas are being created:
 
 1. From the top-level or empty state, add a new node quickly.

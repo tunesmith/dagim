@@ -14,6 +14,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case diskCheckMsg:
 		m = m.refreshFromDiskNow()
+		m = m.ensureGlobalSelectionVisible()
 		return m, scheduleDiskCheck()
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -22,6 +23,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewScroll = clampInt(m.viewScroll, 0, m.globalScrollMax())
 		if m.mode == modeGraphMap {
 			m = m.ensureGraphMapVisible()
+		} else {
+			m = m.ensureGlobalSelectionVisible()
 		}
 		return m, nil
 	case tea.KeyMsg:
@@ -42,19 +45,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.viewScroll > maxScroll {
 					m.viewScroll = maxScroll
 				}
-				return m, nil
+				return m.ensureGlobalSelectionVisible(), nil
 			case "pgup":
 				m.viewScroll -= m.globalScrollPageSize()
 				if m.viewScroll < 0 {
 					m.viewScroll = 0
 				}
-				return m, nil
+				return m.ensureGlobalSelectionVisible(), nil
 			case "home":
 				m.viewScroll = 0
-				return m, nil
+				return m.ensureGlobalSelectionVisible(), nil
 			case "end":
 				m.viewScroll = maxScroll
-				return m, nil
+				return m.ensureGlobalSelectionVisible(), nil
 			}
 		}
 		switch m.mode {
@@ -105,7 +108,7 @@ func resetViewScrollOnModeChange(oldMode mode, next tea.Model, cmd tea.Cmd) (tea
 	if m.mode != oldMode {
 		m.viewScroll = 0
 	}
-	return m, cmd
+	return m.ensureGlobalSelectionVisible(), cmd
 }
 
 func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

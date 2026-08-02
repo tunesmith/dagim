@@ -132,6 +132,213 @@ func TestViewFitsTerminalDimensions(t *testing.T) {
 	assertViewFits(t, scrolled.View(), scrolled.width, scrolled.height)
 }
 
+func TestNodeNavigationKeepsSelectedRelationshipVisible(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("current", "Current"))
+	for i := 1; i <= 20; i++ {
+		id := graph.NodeID(fmt.Sprintf("child-%02d", i))
+		text := fmt.Sprintf("Child item %02d with enough words to wrap in the viewport", i)
+		must(t, g.AddNodeWithID(id, text))
+		must(t, g.AddEdge("current", id))
+	}
+	m := newTestModel(t, g)
+	m.mode = modeNode
+	m.current = "current"
+	m.height = 12
+	m.width = 44
+	m = m.ensureGlobalSelectionVisible()
+
+	for i := 1; i < 20; i++ {
+		next, _ := m.Update(runeKey('j'))
+		m = next.(Model)
+		assertGlobalSelectionVisible(t, m)
+	}
+	if m.viewScroll == 0 {
+		t.Fatal("node viewport did not follow downward navigation")
+	}
+	for i := 1; i < 20; i++ {
+		next, _ := m.Update(runeKey('k'))
+		m = next.(Model)
+		assertGlobalSelectionVisible(t, m)
+	}
+}
+
+func TestOrderNavigationKeepsSelectedAvailableNodeVisible(t *testing.T) {
+	g := graph.New()
+	for i := 1; i <= 20; i++ {
+		id := graph.NodeID(fmt.Sprintf("available-%02d", i))
+		text := fmt.Sprintf("Available item %02d with enough words to wrap in the viewport", i)
+		must(t, g.AddNodeWithID(id, text))
+	}
+	m := newTestModel(t, g)
+	m.mode = modeOrder
+	m.order = graph.NewOrder(g)
+	m.orderReturn = modeReady
+	m.height = 12
+	m.width = 44
+	m = m.ensureGlobalSelectionVisible()
+
+	for i := 1; i < 20; i++ {
+		next, _ := m.Update(runeKey('j'))
+		m = next.(Model)
+		assertGlobalSelectionVisible(t, m)
+	}
+	if m.viewScroll == 0 {
+		t.Fatal("order viewport did not follow downward navigation")
+	}
+	for i := 1; i < 20; i++ {
+		next, _ := m.Update(runeKey('k'))
+		m = next.(Model)
+		assertGlobalSelectionVisible(t, m)
+	}
+}
+
+func TestOrderPicksUndoAndResetKeepSelectionVisible(t *testing.T) {
+	g := graph.New()
+	for i := 1; i <= 20; i++ {
+		id := graph.NodeID(fmt.Sprintf("step-%02d", i))
+		must(t, g.AddNodeWithID(id, fmt.Sprintf("Sequential step %02d", i)))
+		if i > 1 {
+			must(t, g.AddEdge(graph.NodeID(fmt.Sprintf("step-%02d", i-1)), id))
+		}
+	}
+	m := newTestModel(t, g)
+	m.mode = modeOrder
+	m.order = graph.NewOrder(g)
+	m.orderReturn = modeReady
+	m.height = 12
+	m.width = 44
+	m = m.ensureGlobalSelectionVisible()
+
+	for i := 1; i <= 15; i++ {
+		next, _ := m.Update(runeKey(' '))
+		m = next.(Model)
+		assertGlobalSelectionVisible(t, m)
+	}
+	if m.viewScroll == 0 {
+		t.Fatal("growing order output did not move viewport")
+	}
+
+	next, _ := m.Update(runeKey('u'))
+	m = next.(Model)
+	assertGlobalSelectionVisible(t, m)
+	next, _ = m.Update(runeKey('r'))
+	m = next.(Model)
+	assertGlobalSelectionVisible(t, m)
+	if m.viewScroll != 0 {
+		t.Fatalf("viewScroll after order reset = %d", m.viewScroll)
+	}
+}
+
+func TestGlobalPageScrollingCannotHideSelection(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("current", "Current"))
+	for i := 1; i <= 20; i++ {
+		id := graph.NodeID(fmt.Sprintf("child-%02d", i))
+		must(t, g.AddNodeWithID(id, fmt.Sprintf("Child item %02d", i)))
+		must(t, g.AddEdge("current", id))
+	}
+	m := newTestModel(t, g)
+	m.mode = modeNode
+	m.current = "current"
+	m.cursor = 10
+	m.height = 10
+	m.width = 44
+	m = m.ensureGlobalSelectionVisible()
+
+	for _, key := range []tea.KeyType{tea.KeyHome, tea.KeyEnd, tea.KeyPgUp, tea.KeyPgDown} {
+		next, _ := m.Update(tea.KeyMsg{Type: key})
+		m = next.(Model)
+		assertGlobalSelectionVisible(t, m)
+	}
+}
+
+func TestWindowResizeKeepsGlobalSelectionVisible(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("current", "Current"))
+	for i := 1; i <= 16; i++ {
+		id := graph.NodeID(fmt.Sprintf("child-%02d", i))
+		must(t, g.AddNodeWithID(id, fmt.Sprintf("Child item %02d", i)))
+		must(t, g.AddEdge("current", id))
+	}
+	m := newTestModel(t, g)
+	m.mode = modeNode
+	m.current = "current"
+	m.cursor = 15
+	m.height = 20
+	m.width = 60
+	m = m.ensureGlobalSelectionVisible()
+
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 36, Height: 7})
+	m = next.(Model)
+	assertGlobalSelectionVisible(t, m)
+	assertViewFits(t, m.View(), m.width, m.height)
+}
+
+func TestGlobalViewportRenderCorrectsStaleCamera(t *testing.T) {
+	g := graph.New()
+	for i := 1; i <= 20; i++ {
+		id := graph.NodeID(fmt.Sprintf("available-%02d", i))
+		must(t, g.AddNodeWithID(id, fmt.Sprintf("Available item %02d", i)))
+	}
+	m := newTestModel(t, g)
+	m.mode = modeOrder
+	m.order = graph.NewOrder(g)
+	m.cursor = 19
+	m.viewScroll = 0
+	m.height = 8
+	m.width = 44
+
+	view := m.View()
+	if !strings.Contains(view, "Available item 20") || !strings.Contains(view, "> ") {
+		t.Fatalf("stale camera did not render selected item:\n%s", view)
+	}
+}
+
+func TestOversizedSelectedItemKeepsCursorMarkerVisible(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("current", "Current"))
+	must(t, g.AddNodeWithID("child", strings.Repeat("very long selected description ", 20)))
+	must(t, g.AddEdge("current", "child"))
+	m := newTestModel(t, g)
+	m.mode = modeNode
+	m.current = "current"
+	m.height = 6
+	m.width = 32
+	m = m.ensureGlobalSelectionVisible()
+
+	body := m.viewBody()
+	start, _, ok := m.globalSelectionBounds(body)
+	if !ok {
+		t.Fatal("missing selected item bounds")
+	}
+	footer := m.globalViewportFooter(body)
+	bodyHeight := m.scrollBodyHeight(footer)
+	if start < m.viewScroll || start >= m.viewScroll+bodyHeight {
+		t.Fatalf("selected marker line %d outside viewport %d..%d", start, m.viewScroll, m.viewScroll+bodyHeight)
+	}
+}
+
+func assertGlobalSelectionVisible(t *testing.T, m Model) {
+	t.Helper()
+	body := m.viewBody()
+	if m.message != "" {
+		body += "\n\n" + errorStyle.Render(m.message)
+	}
+	start, end, ok := m.globalSelectionBounds(body)
+	if !ok {
+		t.Fatal("missing global selection bounds")
+	}
+	bodyHeight := m.scrollBodyHeight(m.globalViewportFooter(body))
+	if start < m.viewScroll || start >= m.viewScroll+bodyHeight {
+		t.Fatalf("selection start %d outside viewport %d..%d", start, m.viewScroll, m.viewScroll+bodyHeight)
+	}
+	if end-start <= bodyHeight && end > m.viewScroll+bodyHeight {
+		t.Fatalf("selection end %d outside viewport %d..%d", end, m.viewScroll, m.viewScroll+bodyHeight)
+	}
+	assertViewFits(t, m.View(), m.width, m.height)
+}
+
 func assertViewFits(t *testing.T, view string, width, height int) {
 	t.Helper()
 	lines := strings.Split(view, "\n")
