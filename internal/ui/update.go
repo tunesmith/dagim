@@ -20,6 +20,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.input.Width = inputWidth(msg.Width)
 		m.viewScroll = clampInt(m.viewScroll, 0, m.globalScrollMax())
+		if m.mode == modeGraphMap {
+			m = m.ensureGraphMapVisible()
+		}
 		return m, nil
 	case tea.KeyMsg:
 		oldMode := m.mode
@@ -82,6 +85,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.mode = m.previous
 			}
 			return resetViewScrollOnModeChange(oldMode, m, nil)
+		case modeGraphMap:
+			return updateWithViewScrollReset(oldMode, m.updateGraphMap, msg)
 		}
 	}
 	return m, nil
@@ -110,6 +115,8 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.setPrompt(promptAddNode, "Add first node", "")
 		case "u":
 			m = m.undoGraphChange()
+		case "g":
+			return m.openGraphMap(modeNode), nil
 		case "?":
 			m.previous = modeNode
 			m.mode = modeHelp
@@ -185,6 +192,8 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.leavesReturn = modeNode
 		m.mode = modeLeaves
 		m.leavesCursor = 0
+	case "g":
+		return m.openGraphMap(modeNode), nil
 	case " ":
 		m = m.toggleComplete(m.current)
 	case "u":
@@ -406,6 +415,8 @@ func (m Model) updateReady(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.leavesReturn = modeReady
 		m.mode = modeLeaves
 		m.leavesCursor = 0
+	case "g":
+		return m.openGraphMap(modeReady), nil
 	case "o":
 		m.order = graph.NewOrder(m.g)
 		m.previous = modeReady
@@ -486,6 +497,8 @@ func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.setSearch()
 	case "r":
 		m.mode = modeReady
+	case "g":
+		return m.openGraphMap(modeLeaves), nil
 	case "o":
 		m.order = graph.NewOrder(m.g)
 		m.previous = modeLeaves
@@ -591,6 +604,36 @@ func (m Model) updateCheck(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.checkScroll = maxScroll
 	case "esc", "enter", "q":
 		m.mode = m.previous
+	}
+	return m, nil
+}
+
+func (m Model) updateGraphMap(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "h", "left":
+		m = m.moveGraphMapHorizontal(false)
+	case "l", "right":
+		m = m.moveGraphMapHorizontal(true)
+	case "j", "down":
+		m = m.moveGraphMapVertical(1)
+	case "k", "up":
+		m = m.moveGraphMapVertical(-1)
+	case "v":
+		m.showCompleted = !m.showCompleted
+		m.mapHistory = nil
+		m = m.ensureGraphMapVisible()
+	case "t":
+		m.mapTransitive = !m.mapTransitive
+		m.mapHistory = nil
+		m = m.ensureGraphMapVisible()
+	case "enter":
+		if m.mapSelected != "" && m.g.HasNode(m.mapSelected) {
+			m.current = m.mapSelected
+			m.cursor = 0
+			m.mode = modeNode
+		}
+	case "g", "esc", "q":
+		m.mode = stableUndoMode(m.mapReturn)
 	}
 	return m, nil
 }

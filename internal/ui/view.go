@@ -23,10 +23,14 @@ var (
 	selectStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("178")).Bold(true)
 	nodeStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Bold(true)
 	completeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Strikethrough(true)
+	readyStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
 	commandStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 )
 
 func (m Model) View() string {
+	if m.mode == modeGraphMap {
+		return m.fitToTerminal(m.viewGraphMap())
+	}
 	body := m.viewBody()
 	if m.message != "" {
 		body += "\n\n" + errorStyle.Render(m.message)
@@ -64,6 +68,8 @@ func (m Model) viewBody() string {
 		body = m.viewConfirmQuit()
 	case modeHelp:
 		body = m.viewHelp()
+	case modeGraphMap:
+		body = m.viewGraphMap()
 	default:
 		body = m.viewNode()
 	}
@@ -150,7 +156,7 @@ func (m Model) viewNode() string {
 		{"e edit", "d delete node", "/ search", "r ready"},
 		{"l leaves", "o order", "C check", "u undo"},
 		{"Space done/undone", "v completed", "R reset", "W rewrite"},
-		{"J/K reorder", "q quit", "? help"},
+		{"g graph", "J/K reorder", "q quit", "? help"},
 	}))
 	return b.String()
 }
@@ -475,6 +481,7 @@ func (m Model) viewHelp() string {
 		"a add node        p add/link parent    c add/link child",
 		"x unlink selected e edit              d delete node",
 		"/ search          r ready             l leaves",
+		"g graph map",
 		"o order remaining J/K reorder",
 		"Space done/undone u undo              v completed",
 		"R reset done      W rewrite file       C check",
@@ -513,7 +520,7 @@ func (m Model) readyFooter() string {
 		{"j/k move", "PgUp/PgDn page", "Enter focus", "Space done"},
 		{"d delete", "/ search", "v completed", "l leaves"},
 		{"o order", "R reset", "W rewrite", "C check"},
-		{"u undo", "q quit", "? help"},
+		{"g graph", "u undo", "q quit"},
 	})
 }
 
@@ -522,7 +529,7 @@ func (m Model) leavesFooter() string {
 		{"j/k move", "PgUp/PgDn page", "Enter focus", "Space done"},
 		{"r ready", "/ search", "v completed", "o order"},
 		{"J/K reorder", "R reset", "W rewrite", "C check"},
-		{"u undo", "q quit", "Esc back", "? help"},
+		{"g graph", "u undo", "q quit", "Esc back"},
 	})
 }
 
@@ -677,7 +684,7 @@ func (m Model) padBlock(text string) string {
 
 func (m Model) usesGlobalViewport() bool {
 	switch m.mode {
-	case modeReady, modeLeaves, modeSearch, modePrompt, modeCheck:
+	case modeReady, modeLeaves, modeSearch, modePrompt, modeCheck, modeGraphMap:
 		return false
 	default:
 		return true

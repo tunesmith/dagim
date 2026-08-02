@@ -54,6 +54,7 @@ Version 1 should support:
 15. Optional per-node completion state stored in the `.dagim` file.
 16. A leaves view showing nodes with no children.
 17. An ephemeral order mode for rehearsing an order for remaining incomplete work.
+18. A read-only left-to-right graph map of the current completion frontier.
 
 ## 4. Non-goals for Version 1
 
@@ -65,8 +66,8 @@ Version 1 should not attempt to provide:
 4. Multi-line node bodies.
 5. Rich text.
 6. Embedded images or attachments.
-7. A canvas or visual node-link graph editor.
-8. Automatic graph layout.
+7. A canvas or visual node-link graph editor; the graph map is navigational and read-only.
+8. Persisted manual node positioning.
 9. Graph database integration.
 10. Cloud sync or collaboration.
 11. Automatic generation of a canonical total topological order.
@@ -476,7 +477,8 @@ Primary views:
 3. Ready view.
 4. Leaves view.
 5. Order remaining mode.
-6. Help/command view.
+6. Graph map.
+7. Help/command view.
 
 When opening a non-empty graph, the TUI should start in the ready view. Empty files should start in the empty node state so the first action is still `a` to add a node.
 
@@ -564,6 +566,7 @@ e             edit current node text
 d             delete current node, with confirmation if it has edges
 r             show ready view
 l             show leaves view
+g             show graph map
 Space         mark selected/current node complete or incomplete
 v             show/hide completed nodes
 J / K         reorder selected visible row
@@ -755,6 +758,39 @@ Rules:
 7. Esc returns to the view that opened leaves.
 
 Leaves are a property of the graph. A node is a leaf only because it currently has no children; it is not a distinct node type.
+
+## 16.6 Graph Map
+
+The graph map is a temporary, read-only overview opened with `g`. It does not
+replace the focused node and frontier views as the primary editing surfaces.
+
+Rules:
+
+1. Edges flow from parent to child, left to right.
+2. With completed nodes hidden, all ready nodes share the leftmost rank.
+3. A remaining node's rank is one more than the greatest rank of its visible
+   parents, so every visible edge moves right.
+4. `v` reveals completed history in ranks to the left of the ready frontier.
+5. Diagnosed transitive edges are hidden by default without mutating the graph;
+   the header discloses the hidden count and `t` reveals the literal edge set.
+6. Inbound and outbound edges incident to the selected node are highlighted
+   without relayout; mixed-direction junctions remain neutral while shared
+   collinear segments continue the highlight beyond the junction.
+7. `h/l` moves along displayed parent/child relationships, preferring the
+   nearest rank before vertical proximity. Opposite horizontal movement first
+   retraces exact traversal history. `j/k` moves between real nodes in the
+   current rank and clears that history.
+8. Enter leaves the map and focuses the selected node in node view.
+9. `g`, Esc, or `q` returns to the view that opened the map.
+10. The map uses a two-dimensional viewport for graphs larger than the terminal.
+11. Layout is deterministic and uses file order as its stable starting order.
+12. A full-width inspector below the status line wraps the selected node's full
+    description when space permits. In a constrained terminal it truncates
+    before consuming the selected card's minimum viewport height, and navigation
+    keeps that card inside the viewport.
+13. When the selected node is away from a graph boundary, horizontal navigation
+    preserves a small viewport margin on both sides of its card so clipped
+    inbound and outbound edges remain visible as directional context.
 
 ## 17. Order Remaining Mode
 
