@@ -45,10 +45,12 @@ type TransitiveEdge struct {
 
 var (
 	ErrEmptyNodeID   = errors.New("empty node id")
+	ErrInvalidNodeID = errors.New("invalid node id")
 	ErrEmptyNodeText = errors.New("empty node text")
 	ErrDuplicateNode = errors.New("duplicate node id")
 	ErrUnknownNode   = errors.New("unknown node")
 	ErrDuplicateEdge = errors.New("duplicate edge")
+	ErrMissingEdge   = errors.New("missing edge")
 	ErrSelfEdge      = errors.New("self edge")
 	ErrCycle         = errors.New("cycle")
 	ErrBlocked       = errors.New("blocked by incomplete parents")
@@ -109,7 +111,7 @@ func (g *Graph) AddNodeWithID(id NodeID, text string) error {
 		return ErrEmptyNodeID
 	}
 	if !ValidID(id) {
-		return fmt.Errorf("invalid node id %q", id)
+		return fmt.Errorf("%w: %q", ErrInvalidNodeID, id)
 	}
 	if text == "" {
 		return ErrEmptyNodeText
@@ -301,7 +303,7 @@ func (g *Graph) RemoveEdge(parent, child NodeID) error {
 		return fmt.Errorf("%w: %s", ErrUnknownNode, child)
 	}
 	if _, exists := g.parents[child][parent]; !exists {
-		return fmt.Errorf("edge %s -> %s does not exist", parent, child)
+		return fmt.Errorf("%w: %s -> %s", ErrMissingEdge, parent, child)
 	}
 	delete(g.parents[child], parent)
 	return nil
@@ -458,7 +460,7 @@ func (g *Graph) Stats() Stats {
 func (g *Graph) Validate() error {
 	for _, id := range g.order {
 		if !ValidID(id) {
-			return fmt.Errorf("invalid node id %q", id)
+			return fmt.Errorf("%w: %q", ErrInvalidNodeID, id)
 		}
 		node := g.nodes[id]
 		if strings.TrimSpace(node.Text) == "" {

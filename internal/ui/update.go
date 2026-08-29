@@ -14,21 +14,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case diskCheckMsg:
 		m = m.refreshFromDiskNow()
-		m = m.ensureGlobalSelectionVisible()
+		m = m.ensureSelectionVisible()
 		return m, scheduleDiskCheck()
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 		m.input.Width = inputWidth(msg.Width)
-		m.viewScroll = clampInt(m.viewScroll, 0, m.globalScrollMax())
 		if m.mode == modeGraphMap {
 			m = m.ensureGraphMapVisible()
 		} else {
-			m = m.ensureGlobalSelectionVisible()
+			m = m.ensureSelectionVisible()
 		}
 		return m, nil
 	case tea.KeyMsg:
-		oldMode := m.mode
 		m.message = ""
 		m = m.refreshFromDiskNow()
 		switch msg.String() {
@@ -37,78 +35,75 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+z":
 			return m, tea.Suspend
 		}
-		if m.usesGlobalViewport() {
+		if m.usesGlobalViewport() && m.mode != modeNode && m.mode != modeOrder {
 			maxScroll := m.globalScrollMax()
 			switch msg.String() {
 			case "pgdown":
-				m.viewScroll += m.globalScrollPageSize()
-				if m.viewScroll > maxScroll {
-					m.viewScroll = maxScroll
+				m = m.withScrollOffset(m.scrollOffset() + m.globalScrollPageSize())
+				if m.scrollOffset() > maxScroll {
+					m = m.withScrollOffset(maxScroll)
 				}
-				return m.ensureGlobalSelectionVisible(), nil
+				return m.ensureSelectionVisible(), nil
 			case "pgup":
-				m.viewScroll -= m.globalScrollPageSize()
-				if m.viewScroll < 0 {
-					m.viewScroll = 0
+				m = m.withScrollOffset(m.scrollOffset() - m.globalScrollPageSize())
+				if m.scrollOffset() < 0 {
+					m = m.withScrollOffset(0)
 				}
-				return m.ensureGlobalSelectionVisible(), nil
+				return m.ensureSelectionVisible(), nil
 			case "home":
-				m.viewScroll = 0
-				return m.ensureGlobalSelectionVisible(), nil
+				m = m.withScrollOffset(0)
+				return m.ensureSelectionVisible(), nil
 			case "end":
-				m.viewScroll = maxScroll
-				return m.ensureGlobalSelectionVisible(), nil
+				m = m.withScrollOffset(maxScroll)
+				return m.ensureSelectionVisible(), nil
 			}
 		}
 		switch m.mode {
 		case modeNode:
-			return updateWithViewScrollReset(oldMode, m.updateNode, msg)
+			return updateAndEnsure(m.updateNode, msg)
 		case modePrompt:
-			return updateWithViewScrollReset(oldMode, m.updatePrompt, msg)
+			return updateAndEnsure(m.updatePrompt, msg)
 		case modeSearch:
-			return updateWithViewScrollReset(oldMode, m.updateSearch, msg)
+			return updateAndEnsure(m.updateSearch, msg)
 		case modeReady:
-			return updateWithViewScrollReset(oldMode, m.updateReady, msg)
+			return updateAndEnsure(m.updateReady, msg)
 		case modeLeaves:
-			return updateWithViewScrollReset(oldMode, m.updateLeaves, msg)
+			return updateAndEnsure(m.updateLeaves, msg)
 		case modeOrder:
-			return updateWithViewScrollReset(oldMode, m.updateOrder, msg)
+			return updateAndEnsure(m.updateOrder, msg)
 		case modeCheck:
-			return updateWithViewScrollReset(oldMode, m.updateCheck, msg)
+			return updateAndEnsure(m.updateCheck, msg)
 		case modeConfirmDelete:
-			return updateWithViewScrollReset(oldMode, m.updateConfirmDelete, msg)
+			return updateAndEnsure(m.updateConfirmDelete, msg)
 		case modeConfirmRewrite:
-			return updateWithViewScrollReset(oldMode, m.updateConfirmRewrite, msg)
+			return updateAndEnsure(m.updateConfirmRewrite, msg)
 		case modeConfirmReset:
-			return updateWithViewScrollReset(oldMode, m.updateConfirmReset, msg)
+			return updateAndEnsure(m.updateConfirmReset, msg)
 		case modeConfirmQuit:
-			return updateWithViewScrollReset(oldMode, m.updateConfirmQuit, msg)
+			return updateAndEnsure(m.updateConfirmQuit, msg)
 		case modeHelp:
 			if msg.String() == "esc" || msg.String() == "q" || msg.String() == "?" {
 				m.mode = m.previous
 			}
-			return resetViewScrollOnModeChange(oldMode, m, nil)
+			return ensureAfterUpdate(m, nil)
 		case modeGraphMap:
-			return updateWithViewScrollReset(oldMode, m.updateGraphMap, msg)
+			return updateAndEnsure(m.updateGraphMap, msg)
 		}
 	}
 	return m, nil
 }
 
-func updateWithViewScrollReset(oldMode mode, update func(tea.KeyMsg) (tea.Model, tea.Cmd), msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func updateAndEnsure(update func(tea.KeyMsg) (tea.Model, tea.Cmd), msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	next, cmd := update(msg)
-	return resetViewScrollOnModeChange(oldMode, next, cmd)
+	return ensureAfterUpdate(next, cmd)
 }
 
-func resetViewScrollOnModeChange(oldMode mode, next tea.Model, cmd tea.Cmd) (tea.Model, tea.Cmd) {
+func ensureAfterUpdate(next tea.Model, cmd tea.Cmd) (tea.Model, tea.Cmd) {
 	m, ok := next.(Model)
 	if !ok {
 		return next, cmd
 	}
-	if m.mode != oldMode {
-		m.viewScroll = 0
-	}
-	return m.ensureGlobalSelectionVisible(), cmd
+	return m.ensureSelectionVisible(), cmd
 }
 
 func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -145,10 +140,19 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor > 0 {
 			m.cursor--
 		}
+	case "pgdown":
+		m.cursor = m.pageRelationCursor(items, 1)
+	case "pgup":
+		m.cursor = m.pageRelationCursor(items, -1)
+	case "home":
+		m.cursor = moveListCursor(0, len(items), 0)
+	case "end":
+		m.cursor = moveListCursor(len(items)-1, len(items), 0)
 	case "enter":
 		if len(items) > 0 && m.cursor >= 0 && m.cursor < len(items) {
 			m.current = items[m.cursor].id
 			m.cursor = 0
+			m.nodeScroll = 0
 		}
 	case "C":
 		m.previous = modeNode
@@ -228,6 +232,7 @@ func (m Model) updateNode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "?":
 		m.previous = modeNode
+		m.helpScroll = 0
 		m.mode = modeHelp
 	case "q", "ctrl+c":
 		if m.dirty {
@@ -257,6 +262,18 @@ func (m Model) updatePrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.suggestionCursor++
 		}
 		return m, nil
+	case "pgup":
+		m.suggestionCursor = m.pagePromptCursor(-1)
+		return m, nil
+	case "pgdown":
+		m.suggestionCursor = m.pagePromptCursor(1)
+		return m, nil
+	case "home":
+		m.suggestionCursor = 0
+		return m, nil
+	case "end":
+		m.suggestionCursor = clampedCursor(len(m.promptMatches())-1, len(m.promptMatches()))
+		return m, nil
 	case "ctrl+n":
 		return m.submitPrompt(false)
 	case "enter":
@@ -265,6 +282,7 @@ func (m Model) updatePrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
 	m.suggestionCursor = 0
+	m.promptScroll = 0
 	return m, cmd
 }
 
@@ -344,6 +362,18 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.searchCursor++
 		}
 		return m, nil
+	case "pgdown":
+		m.searchCursor = m.pageSearchCursor(1)
+		return m, nil
+	case "pgup":
+		m.searchCursor = m.pageSearchCursor(-1)
+		return m, nil
+	case "home":
+		m.searchCursor = 0
+		return m, nil
+	case "end":
+		m.searchCursor = clampedCursor(len(results)-1, len(results))
+		return m, nil
 	case "enter":
 		if len(results) > 0 {
 			if m.searchCursor >= len(results) {
@@ -351,6 +381,7 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.current = results[m.searchCursor]
 			m.cursor = 0
+			m.nodeScroll = 0
 			m.mode = modeNode
 		}
 		return m, nil
@@ -358,12 +389,12 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
 	m.searchCursor = 0
+	m.searchScroll = 0
 	return m, cmd
 }
 
 func (m Model) updateReady(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	items := m.readyItems()
-	footer := m.readyFooter()
 	switch msg.String() {
 	case "a":
 		return m.setPrompt(promptAddNode, "Add node", "")
@@ -374,9 +405,9 @@ func (m Model) updateReady(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "k", "up":
 		m.readyCursor = moveListCursor(m.readyCursor, len(items), -1)
 	case "pgdown":
-		m.readyCursor = moveListCursor(m.readyCursor, len(items), m.listPageSizeForFooter(footer))
+		m.readyCursor = m.pageReadyCursor(1)
 	case "pgup":
-		m.readyCursor = moveListCursor(m.readyCursor, len(items), -m.listPageSizeForFooter(footer))
+		m.readyCursor = m.pageReadyCursor(-1)
 	case "home":
 		m.readyCursor = moveListCursor(0, len(items), 0)
 	case "end":
@@ -388,6 +419,7 @@ func (m Model) updateReady(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.current = items[m.readyCursor].id
 			m.cursor = 0
+			m.nodeScroll = 0
 			m.mode = modeNode
 		}
 	case " ":
@@ -426,6 +458,7 @@ func (m Model) updateReady(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.orderReturn = modeReady
 		m.mode = modeOrder
 		m.cursor = 0
+		m.orderScroll = 0
 	case "v":
 		m.showCompleted = !m.showCompleted
 		m.readyCursor = 0
@@ -441,6 +474,7 @@ func (m Model) updateReady(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeConfirmRewrite
 	case "?":
 		m.previous = modeReady
+		m.helpScroll = 0
 		m.mode = modeHelp
 	case "q", "ctrl+c":
 		if m.dirty {
@@ -455,7 +489,6 @@ func (m Model) updateReady(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	leaves := m.visibleLeaves()
-	footer := m.leavesFooter()
 	switch msg.String() {
 	case "esc":
 		m.mode = m.leavesReturn
@@ -466,9 +499,9 @@ func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "k", "up":
 		m.leavesCursor = moveListCursor(m.leavesCursor, len(leaves), -1)
 	case "pgdown":
-		m.leavesCursor = moveListCursor(m.leavesCursor, len(leaves), m.listPageSizeForFooter(footer))
+		m.leavesCursor = m.pageLeavesCursor(1)
 	case "pgup":
-		m.leavesCursor = moveListCursor(m.leavesCursor, len(leaves), -m.listPageSizeForFooter(footer))
+		m.leavesCursor = m.pageLeavesCursor(-1)
 	case "home":
 		m.leavesCursor = moveListCursor(0, len(leaves), 0)
 	case "end":
@@ -480,6 +513,7 @@ func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.current = leaves[m.leavesCursor]
 			m.cursor = 0
+			m.nodeScroll = 0
 			m.mode = modeNode
 		}
 	case " ":
@@ -508,6 +542,7 @@ func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.orderReturn = modeLeaves
 		m.mode = modeOrder
 		m.cursor = 0
+		m.orderScroll = 0
 	case "v":
 		m.showCompleted = !m.showCompleted
 		m.leavesCursor = 0
@@ -523,6 +558,7 @@ func (m Model) updateLeaves(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeConfirmRewrite
 	case "?":
 		m.previous = modeLeaves
+		m.helpScroll = 0
 		m.mode = modeHelp
 	case "q":
 		if m.dirty {
@@ -551,6 +587,14 @@ func (m Model) updateOrder(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor > 0 {
 			m.cursor--
 		}
+	case "pgdown":
+		m.cursor = m.pageOrderCursor(1)
+	case "pgup":
+		m.cursor = m.pageOrderCursor(-1)
+	case "home":
+		m.cursor = moveListCursor(0, len(available), 0)
+	case "end":
+		m.cursor = moveListCursor(len(available)-1, len(available), 0)
 	case " ":
 		if len(available) > 0 {
 			if m.cursor >= len(available) {
@@ -574,6 +618,7 @@ func (m Model) updateOrder(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		m.order.Reset()
 		m.cursor = 0
+		m.orderScroll = 0
 	case "e":
 		return m.setPrompt(promptExportOrder, "Export order", defaultOrderPath(m.path))
 	}

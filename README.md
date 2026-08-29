@@ -205,9 +205,13 @@ can be edited later without changing identity.
 - `?`: show help
 - `q`: quit
 
-In every view with a highlighted item, navigation and content changes move the
-viewport as needed so the selection remains visible. Page scrolling is
-constrained to preserve that selection as well.
+In every text view with a highlighted item, the viewport remains still while
+the selection is visible and moves only when the selection crosses an edge.
+`PgUp`/`PgDn` advances the logical selection by approximately one rendered page
+with a one-line overlap; search and link matches support the same paging.
+Textual command footers are separated from the last body row by a blank line and
+collapse to essential controls on short terminals. The graph map keeps its
+tightly fitted canvas and footer.
 
 In the graph map, `h/l` follows displayed parent/child edges, `j/k` moves
 within a rank, and `t` reveals transitive edges that are hidden by default.

@@ -19,7 +19,10 @@ var version = "dev"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		var reported reportedError
+		if !errors.As(err, &reported) {
+			fmt.Fprintln(os.Stderr, err)
+		}
 		os.Exit(1)
 	}
 }
@@ -29,6 +32,21 @@ func run(args []string) error {
 }
 
 func runWithIO(args []string, stdout, stderr io.Writer) error {
+	jsonOutput := wantsJSON(args) && !wantsHelp(args)
+	dispatchStderr := stderr
+	if jsonOutput {
+		dispatchStderr = io.Discard
+	} else if wantsHelp(args) {
+		dispatchStderr = stdout
+	}
+	err := dispatch(args, stdout, dispatchStderr)
+	if err != nil && jsonOutput {
+		return writeJSONFailure(stdout, err)
+	}
+	return err
+}
+
+func dispatch(args []string, stdout, stderr io.Writer) error {
 	if len(args) > 0 {
 		switch args[0] {
 		case "check":
@@ -60,6 +78,52 @@ func runWithIO(args []string, stdout, stderr io.Writer) error {
 	return runLegacy(args, stdout, stderr)
 }
 
+func wantsJSON(args []string) bool {
+	return hasInvocationFlag(args, "json")
+}
+
+func wantsHelp(args []string) bool {
+	return len(args) > 0 && args[0] == "help" || hasInvocationFlag(args, "help") || hasInvocationFlag(args, "h")
+}
+
+func hasInvocationFlag(args []string, target string) bool {
+	valueFlags := commandValueFlags(args)
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			return false
+		}
+		if !strings.HasPrefix(arg, "-") || arg == "-" {
+			continue
+		}
+		name := strings.TrimLeft(arg, "-")
+		name, value, hasValue := strings.Cut(name, "=")
+		if name == target && (!hasValue || value == "true") {
+			return true
+		}
+		if valueFlags[name] && !hasValue && i+1 < len(args) {
+			i++
+		}
+	}
+	return false
+}
+
+func commandValueFlags(args []string) map[string]bool {
+	if len(args) == 0 {
+		return nil
+	}
+	switch args[0] {
+	case "add":
+		return map[string]bool{"text": true, "parent": true, "child": true}
+	case "edit":
+		return map[string]bool{"text": true}
+	case "list":
+		return map[string]bool{"state": true}
+	default:
+		return nil
+	}
+}
+
 func runLegacy(args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("dagim", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -73,18 +137,21 @@ func runLegacy(args []string, stdout, stderr io.Writer) error {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
-		return err
+		return diagnosticError("usage", err.Error(), "dagim")
 	}
 	if *showVersion {
+		if *jsonOutput {
+			return writeJSON(stdout, versionOutput{Version: version})
+		}
 		fmt.Fprintln(stdout, versionLine())
 		return nil
 	}
 	if *jsonOutput && !*check {
-		return fmt.Errorf("--json requires --check or a subcommand")
+		return diagnosticError("usage", "--json requires --check or a subcommand", "--json")
 	}
 	if fs.NArg() != 1 {
 		fs.Usage()
-		return fmt.Errorf("expected exactly one file")
+		return diagnosticError("usage", "expected exactly one file", "dagim")
 	}
 	path := fs.Arg(0)
 	if *check {

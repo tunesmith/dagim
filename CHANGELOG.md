@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.4.0 (2026-08-29)
+
+### Added
+
+- JSON schema version 2 uses a uniform success/failure envelope with structured
+  diagnostics and deterministic stdout, stderr, and exit-status behavior.
+- Selectable text views now use persistent edge-only scrolling and
+  rendered-height-aware selection paging, including Search and link matches.
+
+### Changed
+
+- Text screens separate body content from responsive command footers with a
+  blank row; the graph-map canvas remains tightly fitted.
+- Terminal wrapping, truncation, and command-grid measurement are now
+  grapheme-safe and display-cell-aware.
+- Atomic saves preserve permissions and sync the containing directory; first
+  creation refuses to overwrite a concurrently created file.
+- CLI and TUI reads share ordered query projections for node state, relations,
+  search, frontiers, and graph transitions.
+
+### Compatibility
+
+- The file format remains `# dagim v1`; existing files require no migration.
+- JSON schema version 1 is intentionally replaced without a compatibility mode
+  as a one-time pre-adoption contract reset.
+
 ## 1.3.1 (2026-08-02)
 
 ### Fixed

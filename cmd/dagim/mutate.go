@@ -10,23 +10,17 @@ import (
 
 	"github.com/tunesmith/dagim/internal/dagimfile"
 	"github.com/tunesmith/dagim/internal/graph"
+	domainquery "github.com/tunesmith/dagim/internal/query"
 )
 
 type mutationOutput struct {
-	SchemaVersion int          `json:"schema_version"`
-	Action        string       `json:"action"`
-	DryRun        bool         `json:"dry_run"`
-	Node          nodeOutput   `json:"node"`
-	Changed       []nodeOutput `json:"changed"`
-	NewlyReady    []nodeOutput `json:"newly_ready"`
-	NewlyBlocked  []nodeOutput `json:"newly_blocked"`
-	Stats         statsOutput  `json:"stats"`
-}
-
-type graphTransitions struct {
-	CompletionChanged []nodeOutput
-	NewlyReady        []nodeOutput
-	NewlyBlocked      []nodeOutput
+	Action       string       `json:"action"`
+	DryRun       bool         `json:"dry_run"`
+	Node         nodeOutput   `json:"node"`
+	Changed      []nodeOutput `json:"changed"`
+	NewlyReady   []nodeOutput `json:"newly_ready"`
+	NewlyBlocked []nodeOutput `json:"newly_blocked"`
+	Stats        statsOutput  `json:"stats"`
 }
 
 func runCompleteCommand(args []string, stdout, stderr io.Writer) error {
@@ -38,11 +32,11 @@ func runCompleteCommand(args []string, stdout, stderr io.Writer) error {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
-		return err
+		return diagnosticError("usage", err.Error(), "complete")
 	}
 	if fs.NArg() != 2 {
 		fs.Usage()
-		return fmt.Errorf("complete expects a file and node ID")
+		return diagnosticError("usage", "complete expects a file and node ID", "complete")
 	}
 	return mutateCompletion(fs.Arg(0), graph.NodeID(fs.Arg(1)), "complete", false, *jsonOutput, stdout)
 }
@@ -57,11 +51,11 @@ func runReopenCommand(args []string, stdout, stderr io.Writer) error {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
-		return err
+		return diagnosticError("usage", err.Error(), "reopen")
 	}
 	if fs.NArg() != 2 {
 		fs.Usage()
-		return fmt.Errorf("reopen expects a file and node ID")
+		return diagnosticError("usage", "reopen expects a file and node ID", "reopen")
 	}
 	return mutateCompletion(fs.Arg(0), graph.NodeID(fs.Arg(1)), "reopen", *dryRun, *jsonOutput, stdout)
 }
@@ -70,6 +64,9 @@ func mutateCompletion(path string, id graph.NodeID, action string, dryRun, jsonO
 	g, err := dagimfile.Load(path)
 	if err != nil {
 		return err
+	}
+	if !g.HasNode(id) {
+		return diagnosticError("unknown_node", fmt.Sprintf("%s: %s", graph.ErrUnknownNode, id), string(id))
 	}
 	before := g.Clone()
 
@@ -83,7 +80,7 @@ func mutateCompletion(path string, id graph.NodeID, action string, dryRun, jsonO
 			return err
 		}
 	default:
-		return fmt.Errorf("unknown completion action %q", action)
+		return diagnosticError("internal_error", fmt.Sprintf("unknown completion action %q", action), action)
 	}
 
 	result, err := completionMutationOutput(action, dryRun, before, g, id)
@@ -108,46 +105,19 @@ func completionMutationOutput(action string, dryRun bool, before, after *graph.G
 		return mutationOutput{}, fmt.Errorf("%w: %s", graph.ErrUnknownNode, id)
 	}
 	result := mutationOutput{
-		SchemaVersion: outputSchemaVersion,
-		Action:        action,
-		DryRun:        dryRun,
-		Node:          summarizeNode(after, target),
-		Changed:       make([]nodeOutput, 0),
-		NewlyReady:    make([]nodeOutput, 0),
-		NewlyBlocked:  make([]nodeOutput, 0),
-		Stats:         makeStatsOutput(after.Stats()),
+		Action:       action,
+		DryRun:       dryRun,
+		Node:         summarizeNode(domainquery.Summarize(after, target)),
+		Changed:      make([]nodeOutput, 0),
+		NewlyReady:   make([]nodeOutput, 0),
+		NewlyBlocked: make([]nodeOutput, 0),
+		Stats:        makeStatsOutput(after.Stats()),
 	}
-	transitions := compareGraphStates(before, after)
-	result.Changed = transitions.CompletionChanged
-	result.NewlyReady = transitions.NewlyReady
-	result.NewlyBlocked = transitions.NewlyBlocked
+	transitions := domainquery.Compare(before, after)
+	result.Changed = summarizeNodes(transitions.CompletionChanged)
+	result.NewlyReady = summarizeNodes(transitions.NewlyReady)
+	result.NewlyBlocked = summarizeNodes(transitions.NewlyBlocked)
 	return result, nil
-}
-
-func compareGraphStates(before, after *graph.Graph) graphTransitions {
-	result := graphTransitions{
-		CompletionChanged: make([]nodeOutput, 0),
-		NewlyReady:        make([]nodeOutput, 0),
-		NewlyBlocked:      make([]nodeOutput, 0),
-	}
-	for _, node := range after.Nodes() {
-		afterSummary := summarizeNode(after, node)
-		beforeNode, existed := before.Node(node.ID)
-		if !existed {
-			continue
-		}
-		beforeSummary := summarizeNode(before, beforeNode)
-		if beforeNode.Complete != node.Complete {
-			result.CompletionChanged = append(result.CompletionChanged, afterSummary)
-		}
-		if beforeSummary.State != "ready" && afterSummary.State == "ready" {
-			result.NewlyReady = append(result.NewlyReady, afterSummary)
-		}
-		if beforeSummary.State != "blocked" && afterSummary.State == "blocked" {
-			result.NewlyBlocked = append(result.NewlyBlocked, afterSummary)
-		}
-	}
-	return result
 }
 
 func makeStatsOutput(stats graph.Stats) statsOutput {
