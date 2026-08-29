@@ -483,9 +483,12 @@ Primary views:
 When opening a non-empty graph, the TUI should start in the ready view. Empty files should start in the empty node state so the first action is still `a` to add a node.
 
 Every view with a highlighted selectable item must keep that item inside the
-visible terminal viewport. Cursor movement, content changes, undo/reset,
-external reload, terminal resize, and manual page scrolling must adjust or
-constrain the view camera rather than allowing the highlight to disappear.
+visible terminal viewport. The camera remains unchanged while the complete
+selected row is visible and moves only enough to reveal a row that crosses an
+edge. Cursor movement, content changes, undo/reset, external reload, and
+terminal resize must preserve and clamp this persistent viewport state.
+`PgUp` and `PgDn` move the logical selection by approximately one rendered page
+with a one-line overlap rather than moving a camera independently of selection.
 When an individual wrapped item is taller than the viewport, its selection
 marker must remain visible.
 
@@ -553,7 +556,14 @@ On wide terminals, the TUI should remain left-anchored with a modest gutter and 
 
 Command panels should render as aligned grids rather than hand-spaced prose rows. They should reflow to fewer columns on narrow terminals so command labels do not extend off-screen.
 
-Every rendered view should respect the terminal's reported width and height. Views with lists should window their list content around the selected item; free-form views should provide in-app scrolling instead of relying on terminal scrollback or allowing content to run off-screen.
+Every rendered view should respect the terminal's reported width and height.
+Selectable text views should maintain persistent edge-only viewport offsets;
+free-form Check and Help views should provide camera paging instead of relying
+on terminal scrollback. Text layout and truncation should use terminal display
+cells and grapheme-safe splitting. Text screens reserve one blank line between
+body content and their footer. Full command grids collapse to essential
+controls when necessary to retain visible body rows; the graph map is excluded
+from this footer gap.
 
 ### 11.2 Suggested Keybindings
 
@@ -621,7 +631,10 @@ Behavior:
 
 The autocomplete list should hide the current node, nodes already linked in the requested direction, and nodes that would create a cycle if linked. This is a usability filter; graph operations must still reject duplicate edges and cycles because typed exact matches can bypass the suggestion list.
 
-Autocomplete lists should be height-aware. The prompt input and command hints must remain visible in normal terminal sizes; long match lists should render as a bounded window around the selected match and show the displayed range, for example `Matches 8-13 of 25`.
+Autocomplete lists should be height-aware. The prompt input and command hints
+must remain visible in normal terminal sizes; long match lists should use a
+persistent bounded viewport that moves only when the selected match crosses an
+edge and should show the displayed range, for example `Matches 8-13 of 25`.
 
 ### 12.3 Add Child
 

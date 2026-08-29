@@ -4,6 +4,8 @@ package dagimfile
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -212,6 +214,67 @@ node b: B
 	}
 	if !reflect.DeepEqual(first.Order(), second.Order()) {
 		t.Fatalf("orders = %#v %#v", first.Order(), second.Order())
+	}
+}
+
+func TestSaveAtomicPreservesModeAndCreateRefusesOverwrite(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "graph.dagim")
+	if err := os.WriteFile(path, []byte(Header+"\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	g := graph.New()
+	must(t, g.AddNodeWithID("a", "A"))
+	if err := SaveAtomic(path, g); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o640 {
+		t.Fatalf("mode = %o, want 640", got)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := graph.New()
+	must(t, other.AddNodeWithID("b", "B"))
+	if err := CreateAtomic(path, other); !errors.Is(err, os.ErrExist) {
+		t.Fatalf("CreateAtomic error = %v, want exists", err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("CreateAtomic changed existing file:\n%s", after)
+	}
+}
+
+func TestCreateAtomicWritesParseableFileAndSaveRejectsInvalidGraph(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "new.dagim")
+	g := graph.New()
+	must(t, g.AddNodeWithID("parent", "Parent"))
+	must(t, g.AddNodeWithID("child", "Child"))
+	must(t, g.SetComplete("child", true))
+	must(t, g.AddEdge("parent", "child"))
+	if err := SaveAtomic(path, g); !errors.Is(err, graph.ErrBlocked) {
+		t.Fatalf("SaveAtomic invalid error = %v", err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("invalid save created file: %v", err)
+	}
+	must(t, g.SetComplete("child", false))
+	if err := CreateAtomic(path, g); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !loaded.HasNode("child") {
+		t.Fatal("created graph missing child")
 	}
 }
 

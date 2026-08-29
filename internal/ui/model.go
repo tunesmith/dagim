@@ -14,6 +14,7 @@ import (
 
 	"github.com/tunesmith/dagim/internal/dagimfile"
 	"github.com/tunesmith/dagim/internal/graph"
+	domainquery "github.com/tunesmith/dagim/internal/query"
 )
 
 type mode int
@@ -66,8 +67,14 @@ type undoSnapshot struct {
 	leavesCursor  int
 	leavesReturn  mode
 	searchCursor  int
+	nodeScroll    int
+	promptScroll  int
+	searchScroll  int
+	readyScroll   int
+	leavesScroll  int
+	orderScroll   int
 	checkScroll   int
-	viewScroll    int
+	helpScroll    int
 	showCompleted bool
 }
 
@@ -95,8 +102,14 @@ type Model struct {
 	leavesCursor  int
 	leavesReturn  mode
 	searchCursor  int
+	nodeScroll    int
+	promptScroll  int
+	searchScroll  int
+	readyScroll   int
+	leavesScroll  int
+	orderScroll   int
 	checkScroll   int
-	viewScroll    int
+	helpScroll    int
 	showCompleted bool
 	mapReturn     mode
 	mapSelected   graph.NodeID
@@ -167,6 +180,7 @@ func (m Model) setPrompt(action promptAction, title, value string) (Model, tea.C
 	m.promptAction = action
 	m.promptTitle = title
 	m.suggestionCursor = 0
+	m.promptScroll = 0
 	m.input = textinput.New()
 	m.input.Prompt = "> "
 	m.input.CharLimit = 4096
@@ -181,6 +195,7 @@ func (m Model) setSearch() (Model, tea.Cmd) {
 	m.previous = m.mode
 	m.mode = modeSearch
 	m.searchCursor = 0
+	m.searchScroll = 0
 	m.input = textinput.New()
 	m.input.Prompt = "/ "
 	m.input.CharLimit = 4096
@@ -194,22 +209,22 @@ func (m Model) relationItems() []relationItem {
 	if m.current == "" {
 		return nil
 	}
-	var items []relationItem
-	parents, _ := m.g.ParentsOf(m.current)
-	for _, id := range parents {
-		node, _ := m.g.Node(id)
-		if node.Complete && !m.showCompleted {
-			continue
-		}
-		items = append(items, relationItem{kind: "parent", id: id})
+	relations, err := domainquery.RelationsFor(m.g, m.current)
+	if err != nil {
+		return nil
 	}
-	children, _ := m.g.ChildrenOf(m.current)
-	for _, id := range children {
-		node, _ := m.g.Node(id)
-		if node.Complete && !m.showCompleted {
+	var items []relationItem
+	for _, parent := range relations.Parents {
+		if parent.Node.Complete && !m.showCompleted {
 			continue
 		}
-		items = append(items, relationItem{kind: "child", id: id})
+		items = append(items, relationItem{kind: "parent", id: parent.Node.ID})
+	}
+	for _, child := range relations.Children {
+		if child.Node.Complete && !m.showCompleted {
+			continue
+		}
+		items = append(items, relationItem{kind: "child", id: child.Node.ID})
 	}
 	return items
 }
@@ -217,10 +232,8 @@ func (m Model) relationItems() []relationItem {
 func (m Model) searchResults(query string) []graph.NodeID {
 	query = strings.ToLower(strings.TrimSpace(query))
 	var ids []graph.NodeID
-	for _, node := range m.g.Nodes() {
-		if query == "" || strings.Contains(strings.ToLower(node.Text), query) {
-			ids = append(ids, node.ID)
-		}
+	for _, node := range domainquery.Search(m.g, query) {
+		ids = append(ids, node.Node.ID)
 	}
 	return ids
 }
@@ -274,37 +287,6 @@ func (m Model) linkWouldCycle(candidate graph.NodeID, action promptAction) bool 
 	}
 }
 
-func (m Model) promptMatchWindow(total int) (int, int) {
-	return windowAroundCursor(total, m.suggestionCursor, m.promptMatchLimit())
-}
-
-func (m Model) searchResultWindow(total int) (int, int) {
-	return windowAroundCursor(total, m.searchCursor, m.searchResultLimit())
-}
-
-func windowAroundCursor(total, cursor, limit int) (int, int) {
-	if total <= 0 {
-		return 0, 0
-	}
-	if limit >= total {
-		return 0, total
-	}
-	if cursor < 0 {
-		cursor = 0
-	}
-	if cursor >= total {
-		cursor = total - 1
-	}
-	start := cursor - limit/2
-	if start < 0 {
-		start = 0
-	}
-	if start+limit > total {
-		start = total - limit
-	}
-	return start, start + limit
-}
-
 func (m Model) promptMatchLimit() int {
 	const maxMatches = 18
 	if m.height <= 0 {
@@ -344,14 +326,6 @@ func (m Model) listItemLimit() int {
 		return 1
 	}
 	return limit
-}
-
-func (m Model) listPageSizeForFooter(footer string) int {
-	size := m.listItemLimitForFooter(footer) - 1
-	if size < 1 {
-		return 1
-	}
-	return size
 }
 
 func (m Model) selectedSuggestion() (graph.NodeID, bool) {
@@ -413,28 +387,16 @@ func (m Model) ensureCurrent() Model {
 
 func (m Model) readyItems() []completionItem {
 	items := make([]completionItem, 0)
-	for _, id := range m.g.Ready() {
-		items = append(items, completionItem{id: id})
-	}
-	if m.showCompleted {
-		for _, id := range m.g.Completed() {
-			items = append(items, completionItem{id: id})
-		}
+	for _, node := range domainquery.Ready(m.g, m.showCompleted) {
+		items = append(items, completionItem{id: node.Node.ID})
 	}
 	return items
 }
 
 func (m Model) visibleLeaves() []graph.NodeID {
-	leaves := m.g.Leaves()
-	if m.showCompleted {
-		return leaves
-	}
-	filtered := make([]graph.NodeID, 0, len(leaves))
-	for _, id := range leaves {
-		node, _ := m.g.Node(id)
-		if !node.Complete {
-			filtered = append(filtered, id)
-		}
+	filtered := make([]graph.NodeID, 0)
+	for _, node := range domainquery.Leaves(m.g, m.showCompleted) {
+		filtered = append(filtered, node.Node.ID)
 	}
 	return filtered
 }
@@ -578,7 +540,13 @@ func (m Model) autosave() Model {
 		return m
 	}
 	serialized := dagimfile.Serialize(m.g)
-	if err := dagimfile.SaveAtomic(m.path, m.g); err != nil {
+	var err error
+	if m.diskVersion.exists {
+		err = dagimfile.SaveAtomic(m.path, m.g)
+	} else {
+		err = dagimfile.CreateAtomic(m.path, m.g)
+	}
+	if err != nil {
 		m.message = "autosave failed: " + err.Error()
 		m.dirty = true
 		return m
@@ -735,8 +703,14 @@ func (m Model) undoSnapshot() undoSnapshot {
 		leavesCursor:  m.leavesCursor,
 		leavesReturn:  m.leavesReturn,
 		searchCursor:  m.searchCursor,
+		nodeScroll:    m.nodeScroll,
+		promptScroll:  m.promptScroll,
+		searchScroll:  m.searchScroll,
+		readyScroll:   m.readyScroll,
+		leavesScroll:  m.leavesScroll,
+		orderScroll:   m.orderScroll,
 		checkScroll:   m.checkScroll,
-		viewScroll:    m.viewScroll,
+		helpScroll:    m.helpScroll,
 		showCompleted: m.showCompleted,
 	}
 }
@@ -777,8 +751,14 @@ func (m Model) undoGraphChange() Model {
 	m.leavesCursor = snapshot.leavesCursor
 	m.leavesReturn = snapshot.leavesReturn
 	m.searchCursor = snapshot.searchCursor
+	m.nodeScroll = snapshot.nodeScroll
+	m.promptScroll = snapshot.promptScroll
+	m.searchScroll = snapshot.searchScroll
+	m.readyScroll = snapshot.readyScroll
+	m.leavesScroll = snapshot.leavesScroll
+	m.orderScroll = snapshot.orderScroll
 	m.checkScroll = snapshot.checkScroll
-	m.viewScroll = snapshot.viewScroll
+	m.helpScroll = snapshot.helpScroll
 	m.showCompleted = snapshot.showCompleted
 	m.promptAction = promptNone
 	m.order = nil

@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -22,8 +23,9 @@ func TestCLIProcessSuccessUsesStdoutOnly(t *testing.T) {
 	if result.stderr != "" {
 		t.Fatalf("stderr = %q, want empty", result.stderr)
 	}
-	object := decodeJSONObject(t, []byte(result.stdout))
-	assertExactJSONKeys(t, object, "nodes", "schema_version")
+	envelope, object := decodeSuccessEnvelope(t, []byte(result.stdout))
+	assertEnvelope(t, envelope, true)
+	assertExactJSONKeys(t, object, "nodes")
 }
 
 func TestCLIProcessFailureUsesStderrAndNonzeroExit(t *testing.T) {
@@ -32,17 +34,31 @@ func TestCLIProcessFailureUsesStderrAndNonzeroExit(t *testing.T) {
 	if result.exitCode != 1 {
 		t.Fatalf("exit code = %d, want 1", result.exitCode)
 	}
-	if result.stdout != "" {
-		t.Fatalf("stdout = %q, want empty", result.stdout)
+	if result.stderr != "" {
+		t.Fatalf("stderr = %q, want empty", result.stderr)
 	}
-	for _, want := range []string{
-		"blocked by incomplete parents",
-		"serve-dinner",
-		"cook-dinner",
-	} {
-		if !strings.Contains(result.stderr, want) {
-			t.Fatalf("stderr missing %q: %s", want, result.stderr)
-		}
+	envelope := decodeJSONObject(t, []byte(result.stdout))
+	assertEnvelope(t, envelope, false)
+	diagnostics := decodeRawArray(t, envelope["diagnostics"])
+	item := decodeRawObject(t, diagnostics[0])
+	var code string
+	if err := json.Unmarshal(item["code"], &code); err != nil || code != "blocked" {
+		t.Fatalf("code = %q, err %v", code, err)
+	}
+}
+
+func TestCLIProcessJSONUsageFailureUsesEnvelope(t *testing.T) {
+	result := runCLIProcess(t, "show", "--json")
+	if result.exitCode != 1 || result.stderr != "" {
+		t.Fatalf("result = %#v", result)
+	}
+	envelope := decodeJSONObject(t, []byte(result.stdout))
+	assertEnvelope(t, envelope, false)
+	diagnostics := decodeRawArray(t, envelope["diagnostics"])
+	item := decodeRawObject(t, diagnostics[0])
+	var code string
+	if err := json.Unmarshal(item["code"], &code); err != nil || code != "usage" {
+		t.Fatalf("code = %q, err %v", code, err)
 	}
 }
 

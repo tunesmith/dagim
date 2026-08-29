@@ -12,9 +12,10 @@ import (
 
 	"github.com/tunesmith/dagim/internal/dagimfile"
 	"github.com/tunesmith/dagim/internal/graph"
+	domainquery "github.com/tunesmith/dagim/internal/query"
 )
 
-const outputSchemaVersion = 1
+const outputSchemaVersion = 2
 
 type nodeOutput struct {
 	ID        string   `json:"id"`
@@ -26,15 +27,13 @@ type nodeOutput struct {
 }
 
 type nodeListOutput struct {
-	SchemaVersion int          `json:"schema_version"`
-	Nodes         []nodeOutput `json:"nodes"`
+	Nodes []nodeOutput `json:"nodes"`
 }
 
 type nodeShowOutput struct {
-	SchemaVersion int          `json:"schema_version"`
-	Node          nodeOutput   `json:"node"`
-	Parents       []nodeOutput `json:"parents"`
-	Children      []nodeOutput `json:"children"`
+	Node     nodeOutput   `json:"node"`
+	Parents  []nodeOutput `json:"parents"`
+	Children []nodeOutput `json:"children"`
 }
 
 type statsOutput struct {
@@ -53,7 +52,6 @@ type transitiveEdgeOutput struct {
 }
 
 type checkOutput struct {
-	SchemaVersion   int                    `json:"schema_version"`
 	OK              bool                   `json:"ok"`
 	Stats           statsOutput            `json:"stats"`
 	Canonical       bool                   `json:"canonical"`
@@ -69,11 +67,11 @@ func runCheckCommand(args []string, stdout, stderr io.Writer) error {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
-		return err
+		return diagnosticError("usage", err.Error(), "check")
 	}
 	if fs.NArg() != 1 {
 		fs.Usage()
-		return fmt.Errorf("check expects exactly one file")
+		return diagnosticError("usage", "check expects exactly one file", "check")
 	}
 	return runCheckTo(fs.Arg(0), *jsonOutput, stdout)
 }
@@ -87,11 +85,11 @@ func runReadyCommand(args []string, stdout, stderr io.Writer) error {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
-		return err
+		return diagnosticError("usage", err.Error(), "ready")
 	}
 	if fs.NArg() != 1 {
 		fs.Usage()
-		return fmt.Errorf("ready expects exactly one file")
+		return diagnosticError("usage", "ready expects exactly one file", "ready")
 	}
 	return writeNodeList(fs.Arg(0), "ready", *jsonOutput, stdout)
 }
@@ -106,16 +104,17 @@ func runListCommand(args []string, stdout, stderr io.Writer) error {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
-		return err
+		return diagnosticError("usage", err.Error(), "list")
 	}
 	if fs.NArg() != 1 {
 		fs.Usage()
-		return fmt.Errorf("list expects exactly one file")
+		return diagnosticError("usage", "list expects exactly one file", "list")
 	}
-	if !validListState(*state) {
-		return fmt.Errorf("unknown state %q; want all, ready, blocked, complete, or incomplete", *state)
+	filter := domainquery.Filter(*state)
+	if !domainquery.ValidFilter(filter) {
+		return diagnosticError("unknown_state", fmt.Sprintf("unknown state %q; want all, ready, blocked, complete, or incomplete", *state), *state)
 	}
-	return writeNodeList(fs.Arg(0), *state, *jsonOutput, stdout)
+	return writeNodeList(fs.Arg(0), filter, *jsonOutput, stdout)
 }
 
 func runShowCommand(args []string, stdout, stderr io.Writer) error {
@@ -127,11 +126,11 @@ func runShowCommand(args []string, stdout, stderr io.Writer) error {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
-		return err
+		return diagnosticError("usage", err.Error(), "show")
 	}
 	if fs.NArg() != 2 {
 		fs.Usage()
-		return fmt.Errorf("show expects a file and node ID")
+		return diagnosticError("usage", "show expects a file and node ID", "show")
 	}
 
 	g, err := dagimfile.Load(fs.Arg(0))
@@ -139,17 +138,15 @@ func runShowCommand(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	id := graph.NodeID(fs.Arg(1))
-	node, ok := g.Node(id)
-	if !ok {
-		return fmt.Errorf("%w: %s", graph.ErrUnknownNode, id)
+	if !g.HasNode(id) {
+		return diagnosticError("unknown_node", fmt.Sprintf("%s: %s", graph.ErrUnknownNode, id), string(id))
 	}
-	parents, _ := g.ParentsOf(id)
-	children, _ := g.ChildrenOf(id)
+	relations, err := domainquery.RelationsFor(g, id)
+	if err != nil {
+		return err
+	}
 	result := nodeShowOutput{
-		SchemaVersion: outputSchemaVersion,
-		Node:          summarizeNode(g, node),
-		Parents:       summarizeIDs(g, parents),
-		Children:      summarizeIDs(g, children),
+		Node: summarizeNode(relations.Node), Parents: summarizeNodes(relations.Parents), Children: summarizeNodes(relations.Children),
 	}
 	if *jsonOutput {
 		return writeJSON(stdout, result)
@@ -164,7 +161,7 @@ func runHelpCommand(args []string, stdout io.Writer) error {
 		return nil
 	}
 	if len(args) != 1 {
-		return fmt.Errorf("help expects at most one command")
+		return diagnosticError("usage", "help expects at most one command", "help")
 	}
 	switch args[0] {
 	case "check":
@@ -190,25 +187,19 @@ func runHelpCommand(args []string, stdout io.Writer) error {
 	case "delete":
 		writeDeleteUsage(stdout)
 	default:
-		return fmt.Errorf("unknown command %q", args[0])
+		return diagnosticError("unknown_command", fmt.Sprintf("unknown command %q", args[0]), args[0])
 	}
 	return nil
 }
 
-func writeNodeList(path, state string, jsonOutput bool, stdout io.Writer) error {
+func writeNodeList(path string, filter domainquery.Filter, jsonOutput bool, stdout io.Writer) error {
 	g, err := dagimfile.Load(path)
 	if err != nil {
 		return err
 	}
-	nodes := make([]nodeOutput, 0)
-	for _, node := range g.Nodes() {
-		summary := summarizeNode(g, node)
-		if matchesState(summary, state) {
-			nodes = append(nodes, summary)
-		}
-	}
+	nodes := summarizeNodes(domainquery.List(g, filter))
 	if jsonOutput {
-		return writeJSON(stdout, nodeListOutput{SchemaVersion: outputSchemaVersion, Nodes: nodes})
+		return writeJSON(stdout, nodeListOutput{Nodes: nodes})
 	}
 	for _, node := range nodes {
 		fmt.Fprintf(stdout, "%s\t%s\t%s", node.State, node.ID, node.Text)
@@ -220,55 +211,26 @@ func writeNodeList(path, state string, jsonOutput bool, stdout io.Writer) error 
 	return nil
 }
 
-func summarizeIDs(g *graph.Graph, ids []graph.NodeID) []nodeOutput {
-	result := make([]nodeOutput, 0, len(ids))
-	for _, id := range ids {
-		node, _ := g.Node(id)
-		result = append(result, summarizeNode(g, node))
+func summarizeNodes(nodes []domainquery.NodeSummary) []nodeOutput {
+	result := make([]nodeOutput, 0, len(nodes))
+	for _, node := range nodes {
+		result = append(result, summarizeNode(node))
 	}
 	return result
 }
 
-func summarizeNode(g *graph.Graph, node graph.Node) nodeOutput {
-	blockedByIDs, _ := g.IncompleteParentsOf(node.ID)
-	blockedBy := make([]string, 0, len(blockedByIDs))
-	for _, id := range blockedByIDs {
+func summarizeNode(summary domainquery.NodeSummary) nodeOutput {
+	blockedBy := make([]string, 0, len(summary.BlockedBy))
+	for _, id := range summary.BlockedBy {
 		blockedBy = append(blockedBy, string(id))
 	}
-	ready := !node.Complete && len(blockedBy) == 0
-	state := "blocked"
-	if node.Complete {
-		state = "complete"
-	} else if ready {
-		state = "ready"
-	}
 	return nodeOutput{
-		ID:        string(node.ID),
-		Text:      node.Text,
-		State:     state,
-		Complete:  node.Complete,
-		Ready:     ready,
+		ID:        string(summary.Node.ID),
+		Text:      summary.Node.Text,
+		State:     string(summary.State),
+		Complete:  summary.Node.Complete,
+		Ready:     summary.State == domainquery.StateReady,
 		BlockedBy: blockedBy,
-	}
-}
-
-func matchesState(node nodeOutput, state string) bool {
-	switch state {
-	case "all":
-		return true
-	case "incomplete":
-		return !node.Complete
-	default:
-		return node.State == state
-	}
-}
-
-func validListState(state string) bool {
-	switch state {
-	case "all", "ready", "blocked", "complete", "incomplete":
-		return true
-	default:
-		return false
 	}
 }
 
@@ -308,7 +270,6 @@ func writeCheckJSON(w io.Writer, result *dagimfile.CheckResult) error {
 		})
 	}
 	return writeJSON(w, checkOutput{
-		SchemaVersion:   outputSchemaVersion,
 		OK:              true,
 		Stats:           makeStatsOutput(result.Stats),
 		Canonical:       result.IsCanonical,
@@ -319,7 +280,7 @@ func writeCheckJSON(w io.Writer, result *dagimfile.CheckResult) error {
 func writeJSON(w io.Writer, value any) error {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
-	return encoder.Encode(value)
+	return encoder.Encode(jsonEnvelope{SchemaVersion: outputSchemaVersion, OK: true, Result: value, Diagnostics: []diagnosticOutput{}})
 }
 
 // flagsFirst lets the small standard-library flag parser accept flags either

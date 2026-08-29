@@ -11,15 +11,26 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/tunesmith/dagim/internal/diagnostic"
 	"github.com/tunesmith/dagim/internal/graph"
 )
 
 const Header = "# dagim v1"
 
 type ParseError struct {
-	Line int
-	Msg  string
-	Err  error
+	Line    int
+	Code    string
+	Element string
+	Msg     string
+	Err     error
+}
+
+func (e ParseError) DiagnosticValue() diagnostic.Diagnostic {
+	code := e.Code
+	if code == "" {
+		code = "invalid_file"
+	}
+	return diagnostic.Diagnostic{Code: code, Message: e.Error(), Severity: diagnostic.SeverityError, Line: e.Line, Element: e.Element}
 }
 
 func (e ParseError) Error() string {
@@ -68,33 +79,33 @@ func Parse(input string) (*graph.Graph, error) {
 		case strings.HasPrefix(line, "node "):
 			id, text, err := parseNodeLine(line)
 			if err != nil {
-				return nil, ParseError{Line: lineNo, Err: err}
+				return nil, ParseError{Line: lineNo, Code: parseCode(err), Err: err}
 			}
 			if err := g.AddNodeWithID(id, text); err != nil {
-				return nil, ParseError{Line: lineNo, Err: err}
+				return nil, ParseError{Line: lineNo, Code: parseCode(err), Element: string(id), Err: err}
 			}
 			current = id
 		case strings.HasPrefix(line, "parent "):
 			if current == "" {
-				return nil, ParseError{Line: lineNo, Msg: "parent line before first node"}
+				return nil, ParseError{Line: lineNo, Code: "parent_before_node", Msg: "parent line before first node"}
 			}
 			parent, err := parseParentLine(line)
 			if err != nil {
-				return nil, ParseError{Line: lineNo, Err: err}
+				return nil, ParseError{Line: lineNo, Code: parseCode(err), Err: err}
 			}
 			refs = append(refs, parentRef{child: current, parent: parent, line: lineNo})
 		case line == "complete" || strings.HasPrefix(line, "complete "):
 			if current == "" {
-				return nil, ParseError{Line: lineNo, Msg: "complete line before first node"}
+				return nil, ParseError{Line: lineNo, Code: "complete_before_node", Msg: "complete line before first node"}
 			}
 			if err := parseCompleteLine(line); err != nil {
-				return nil, ParseError{Line: lineNo, Err: err}
+				return nil, ParseError{Line: lineNo, Code: "invalid_complete", Element: string(current), Err: err}
 			}
 			if err := g.SetComplete(current, true); err != nil {
-				return nil, ParseError{Line: lineNo, Err: err}
+				return nil, ParseError{Line: lineNo, Code: parseCode(err), Element: string(current), Err: err}
 			}
 		default:
-			return nil, ParseError{Line: lineNo, Msg: fmt.Sprintf("malformed line %q", raw)}
+			return nil, ParseError{Line: lineNo, Code: "malformed_line", Msg: fmt.Sprintf("malformed line %q", raw)}
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -103,13 +114,17 @@ func Parse(input string) (*graph.Graph, error) {
 
 	for _, ref := range refs {
 		if err := g.AddEdge(ref.parent, ref.child); err != nil {
-			return nil, ParseError{Line: ref.line, Err: err}
+			return nil, ParseError{Line: ref.line, Code: parseCode(err), Element: string(ref.parent), Err: err}
 		}
 	}
 	if err := g.Validate(); err != nil {
 		return nil, err
 	}
 	return g, nil
+}
+
+func parseCode(err error) string {
+	return diagnostic.FromError(err).Code
 }
 
 func Serialize(g *graph.Graph) string {
@@ -188,37 +203,92 @@ func Load(path string) (*graph.Graph, error) {
 }
 
 func LoadOrEmpty(path string) (*graph.Graph, error) {
+	g, _, err := LoadOrEmptyState(path)
+	return g, err
+}
+
+func LoadOrEmptyState(path string) (*graph.Graph, bool, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return graph.New(), nil
+		return graph.New(), false, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return Parse(string(data))
+	g, err := Parse(string(data))
+	return g, true, err
 }
 
 func SaveAtomic(path string, g *graph.Graph) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".dagim-*")
+	if err := g.Validate(); err != nil {
+		return err
+	}
+	mode := os.FileMode(0o644)
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode().Perm()
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	tmpName, err := writeAtomicTemp(path, Serialize(g), mode)
 	if err != nil {
 		return err
 	}
-	tmpName := tmp.Name()
 	defer os.Remove(tmpName)
-
-	if _, err := tmp.WriteString(Serialize(g)); err != nil {
-		tmp.Close()
+	if err := os.Rename(tmpName, path); err != nil {
 		return err
+	}
+	return syncDirectory(filepath.Dir(path))
+}
+
+func CreateAtomic(path string, g *graph.Graph) error {
+	if err := g.Validate(); err != nil {
+		return err
+	}
+	tmpName, err := writeAtomicTemp(path, Serialize(g), 0o644)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpName)
+	if err := os.Link(tmpName, path); err != nil {
+		return err
+	}
+	return syncDirectory(filepath.Dir(path))
+}
+
+func writeAtomicTemp(path, serialized string, mode os.FileMode) (string, error) {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".dagim-*")
+	if err != nil {
+		return "", err
+	}
+	tmpName := tmp.Name()
+	fail := func(err error) (string, error) {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return "", err
+	}
+	if err := tmp.Chmod(mode); err != nil {
+		return fail(err)
+	}
+	if _, err := tmp.WriteString(serialized); err != nil {
+		return fail(err)
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
+		return fail(err)
 	}
 	if err := tmp.Close(); err != nil {
-		return err
+		_ = os.Remove(tmpName)
+		return "", err
 	}
-	return os.Rename(tmpName, path)
+	return tmpName, nil
+}
+
+func syncDirectory(path string) error {
+	dir, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer dir.Close()
+	return dir.Sync()
 }
 
 func parseNodeLine(line string) (graph.NodeID, string, error) {

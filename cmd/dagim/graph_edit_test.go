@@ -24,9 +24,7 @@ func TestAddCommandCreatesReadyNodeAndNewFile(t *testing.T) {
 		t.Fatalf("runWithIO add: %v", err)
 	}
 	var result graphEditOutput
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		t.Fatalf("unmarshal add JSON: %v\n%s", err, stdout.String())
-	}
+	decodeJSONResult(t, stdout.Bytes(), &result)
 	if result.Action != "add" || !result.Changed || result.Node == nil {
 		t.Fatalf("add result = %#v", result)
 	}
@@ -65,9 +63,7 @@ func TestAddCommandLinksRepeatedParentsAndChildAtomically(t *testing.T) {
 		t.Fatalf("runWithIO add linked: %v", err)
 	}
 	var result graphEditOutput
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		t.Fatalf("unmarshal linked add JSON: %v", err)
-	}
+	decodeJSONResult(t, stdout.Bytes(), &result)
 	if result.Node == nil || result.Node.ID != "new-gate" || result.Node.State != "ready" {
 		t.Fatalf("added node = %#v", result.Node)
 	}
@@ -115,8 +111,9 @@ func TestAddCommandFailureLeavesFileUnchanged(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "unknown node") {
 		t.Fatalf("add error = %v", err)
 	}
-	if stdout.Len() != 0 {
-		t.Fatalf("failed add stdout = %q", stdout.String())
+	var failure jsonEnvelope
+	if decodeErr := json.Unmarshal(stdout.Bytes(), &failure); decodeErr != nil || failure.OK || len(failure.Diagnostics) != 1 || failure.Diagnostics[0].Code != "unknown_node" {
+		t.Fatalf("failed add envelope = %#v, decode error %v", failure, decodeErr)
 	}
 	if after := readTestFile(t, path); !bytes.Equal(after, before) {
 		t.Fatalf("failed add changed the file")
@@ -132,9 +129,7 @@ func TestEditCommandPreservesIDAndRelationships(t *testing.T) {
 		t.Fatalf("runWithIO edit: %v", err)
 	}
 	var result graphEditOutput
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		t.Fatalf("unmarshal edit JSON: %v", err)
-	}
+	decodeJSONResult(t, stdout.Bytes(), &result)
 	if result.Node == nil || result.Node.ID != "cook-dinner" || result.Node.Text != "Cook supper" {
 		t.Fatalf("edited node = %#v", result.Node)
 	}
@@ -156,9 +151,7 @@ func TestEditCommandPreservesIDAndRelationships(t *testing.T) {
 	if err := runWithIO(args, &stdout, &stderr); err != nil {
 		t.Fatalf("idempotent edit: %v", err)
 	}
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		t.Fatalf("unmarshal idempotent edit: %v", err)
-	}
+	decodeJSONResult(t, stdout.Bytes(), &result)
 	if result.Changed {
 		t.Fatalf("same-text edit reported a change")
 	}
@@ -176,9 +169,7 @@ func TestLinkCommandReopensCompletedChildAndDescendants(t *testing.T) {
 		t.Fatalf("runWithIO link: %v", err)
 	}
 	var result graphEditOutput
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		t.Fatalf("unmarshal link JSON: %v", err)
-	}
+	decodeJSONResult(t, stdout.Bytes(), &result)
 	if got, want := result.EdgesAdded, []edgeOutput{{Parent: "new-parent", Child: "current"}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("edges_added = %#v, want %#v", got, want)
 	}
@@ -221,9 +212,7 @@ func TestUnlinkCommandReportsNewlyReadyNode(t *testing.T) {
 		t.Fatalf("runWithIO unlink: %v", err)
 	}
 	var result graphEditOutput
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		t.Fatalf("unmarshal unlink JSON: %v", err)
-	}
+	decodeJSONResult(t, stdout.Bytes(), &result)
 	if got, want := result.EdgesRemoved, []edgeOutput{{Parent: "chop-vegetables", Child: "cook-dinner"}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("edges_removed = %#v, want %#v", got, want)
 	}
@@ -242,9 +231,7 @@ func TestDeleteDryRunReportsNodeEdgesAndNewlyReadyWithoutSaving(t *testing.T) {
 		t.Fatalf("runWithIO delete --dry-run: %v", err)
 	}
 	var result graphEditOutput
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		t.Fatalf("unmarshal delete JSON: %v\n%s", err, stdout.String())
-	}
+	decodeJSONResult(t, stdout.Bytes(), &result)
 	if result.Action != "delete" || !result.DryRun || !result.Changed {
 		t.Fatalf("delete metadata = %#v", result)
 	}

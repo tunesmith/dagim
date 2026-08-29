@@ -715,11 +715,7 @@ func graphMapCardLines(node graphMapNode, selected bool) []string {
 }
 
 func padGraphMapText(text string, width int) string {
-	runes := []rune(text)
-	if len(runes) > width {
-		runes = runes[:width]
-	}
-	return string(runes) + strings.Repeat(" ", width-len(runes))
+	return padDisplay(truncateText(text, width), width)
 }
 
 func (c graphMapCanvas) render(offsetX, offsetY, width, height int) string {

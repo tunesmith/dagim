@@ -9,9 +9,11 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/clipperhouse/displaywidth"
 
 	"github.com/tunesmith/dagim/internal/graph"
 )
@@ -126,7 +128,7 @@ func TestViewFitsTerminalDimensions(t *testing.T) {
 
 	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
 	scrolled := next.(Model)
-	if scrolled.viewScroll == 0 {
+	if scrolled.scrollOffset() == 0 {
 		t.Fatal("expected global viewport to scroll")
 	}
 	assertViewFits(t, scrolled.View(), scrolled.width, scrolled.height)
@@ -153,7 +155,7 @@ func TestNodeNavigationKeepsSelectedRelationshipVisible(t *testing.T) {
 		m = next.(Model)
 		assertGlobalSelectionVisible(t, m)
 	}
-	if m.viewScroll == 0 {
+	if m.scrollOffset() == 0 {
 		t.Fatal("node viewport did not follow downward navigation")
 	}
 	for i := 1; i < 20; i++ {
@@ -183,7 +185,7 @@ func TestOrderNavigationKeepsSelectedAvailableNodeVisible(t *testing.T) {
 		m = next.(Model)
 		assertGlobalSelectionVisible(t, m)
 	}
-	if m.viewScroll == 0 {
+	if m.scrollOffset() == 0 {
 		t.Fatal("order viewport did not follow downward navigation")
 	}
 	for i := 1; i < 20; i++ {
@@ -215,7 +217,7 @@ func TestOrderPicksUndoAndResetKeepSelectionVisible(t *testing.T) {
 		m = next.(Model)
 		assertGlobalSelectionVisible(t, m)
 	}
-	if m.viewScroll == 0 {
+	if m.scrollOffset() == 0 {
 		t.Fatal("growing order output did not move viewport")
 	}
 
@@ -225,8 +227,8 @@ func TestOrderPicksUndoAndResetKeepSelectionVisible(t *testing.T) {
 	next, _ = m.Update(runeKey('r'))
 	m = next.(Model)
 	assertGlobalSelectionVisible(t, m)
-	if m.viewScroll != 0 {
-		t.Fatalf("viewScroll after order reset = %d", m.viewScroll)
+	if m.scrollOffset() != 0 {
+		t.Fatalf("orderScroll after order reset = %d", m.scrollOffset())
 	}
 }
 
@@ -285,7 +287,7 @@ func TestGlobalViewportRenderCorrectsStaleCamera(t *testing.T) {
 	m.mode = modeOrder
 	m.order = graph.NewOrder(g)
 	m.cursor = 19
-	m.viewScroll = 0
+	m.orderScroll = 0
 	m.height = 8
 	m.width = 44
 
@@ -314,8 +316,8 @@ func TestOversizedSelectedItemKeepsCursorMarkerVisible(t *testing.T) {
 	}
 	footer := m.globalViewportFooter(body)
 	bodyHeight := m.scrollBodyHeight(footer)
-	if start < m.viewScroll || start >= m.viewScroll+bodyHeight {
-		t.Fatalf("selected marker line %d outside viewport %d..%d", start, m.viewScroll, m.viewScroll+bodyHeight)
+	if start < m.scrollOffset() || start >= m.scrollOffset()+bodyHeight {
+		t.Fatalf("selected marker line %d outside viewport %d..%d", start, m.scrollOffset(), m.scrollOffset()+bodyHeight)
 	}
 }
 
@@ -330,11 +332,11 @@ func assertGlobalSelectionVisible(t *testing.T, m Model) {
 		t.Fatal("missing global selection bounds")
 	}
 	bodyHeight := m.scrollBodyHeight(m.globalViewportFooter(body))
-	if start < m.viewScroll || start >= m.viewScroll+bodyHeight {
-		t.Fatalf("selection start %d outside viewport %d..%d", start, m.viewScroll, m.viewScroll+bodyHeight)
+	if start < m.scrollOffset() || start >= m.scrollOffset()+bodyHeight {
+		t.Fatalf("selection start %d outside viewport %d..%d", start, m.scrollOffset(), m.scrollOffset()+bodyHeight)
 	}
-	if end-start <= bodyHeight && end > m.viewScroll+bodyHeight {
-		t.Fatalf("selection end %d outside viewport %d..%d", end, m.viewScroll, m.viewScroll+bodyHeight)
+	if end-start <= bodyHeight && end > m.scrollOffset()+bodyHeight {
+		t.Fatalf("selection end %d outside viewport %d..%d", end, m.scrollOffset(), m.scrollOffset()+bodyHeight)
 	}
 	assertViewFits(t, m.View(), m.width, m.height)
 }
@@ -987,10 +989,10 @@ func TestReadyWindowsItemsToTerminalHeight(t *testing.T) {
 	m.width = 48
 
 	view := m.viewReady()
-	if !strings.Contains(view, "Ready 1-5 of 25") {
+	if !strings.Contains(view, "Ready 1-4 of 25") {
 		t.Fatalf("expected initial ready window:\n%s", view)
 	}
-	if strings.Contains(view, "Ready item 06") {
+	if strings.Contains(view, "Ready item 05") {
 		t.Fatalf("rendered beyond visible ready window:\n%s", view)
 	}
 	if lines := strings.Count(view, "\n") + 1; lines > m.height {
@@ -999,17 +1001,116 @@ func TestReadyWindowsItemsToTerminalHeight(t *testing.T) {
 
 	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
 	paged := next.(Model)
-	if paged.readyCursor != 4 {
+	if paged.readyCursor != 3 {
 		t.Fatalf("readyCursor after PgDown = %d", paged.readyCursor)
 	}
 
 	paged.readyCursor = 14
 	view = paged.viewReady()
-	if !strings.Contains(view, "Ready 13-17 of 25") {
-		t.Fatalf("expected centered ready window:\n%s", view)
+	if !strings.Contains(view, "Ready 12-15 of 25") {
+		t.Fatalf("expected edge-revealed ready window:\n%s", view)
 	}
 	if !strings.Contains(view, "Ready item 15") {
 		t.Fatalf("selected ready item not visible:\n%s", view)
+	}
+}
+
+func TestReadyViewportMovesOnlyAtEdgesAndRestoresAcrossModes(t *testing.T) {
+	g := graph.New()
+	for i := 1; i <= 12; i++ {
+		must(t, g.AddNodeWithID(graph.NodeID(fmt.Sprintf("item-%02d", i)), fmt.Sprintf("Item %02d", i)))
+	}
+	m := newTestModel(t, g)
+	m.height, m.width = 12, 48
+	m = m.ensureSelectionVisible()
+	for i := 0; i < 3; i++ {
+		next, _ := m.Update(runeKey('j'))
+		m = next.(Model)
+		if m.readyScroll != 0 {
+			t.Fatalf("visible movement %d changed offset to %d", i, m.readyScroll)
+		}
+	}
+	next, _ := m.Update(runeKey('j'))
+	m = next.(Model)
+	if m.readyScroll == 0 {
+		t.Fatal("crossing the lower edge did not scroll")
+	}
+	wantCursor, wantScroll := m.readyCursor, m.readyScroll
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	focused := next.(Model)
+	next, _ = focused.Update(runeKey('r'))
+	m = next.(Model)
+	if m.readyCursor != wantCursor || m.readyScroll != wantScroll {
+		t.Fatalf("ready state restored cursor=%d/%d scroll=%d/%d", m.readyCursor, wantCursor, m.readyScroll, wantScroll)
+	}
+}
+
+func TestTextFootersHaveBlankSeparatorAndRespondToHeight(t *testing.T) {
+	g := graph.New()
+	must(t, g.AddNodeWithID("a", "A"))
+	m := newTestModel(t, g)
+	m.width, m.height = 80, 24
+	view := m.viewReady()
+	if !strings.Contains(view, "> A\n\n") || !strings.Contains(view, "d delete") {
+		t.Fatalf("full ready footer lacks separator or commands:\n%s", view)
+	}
+	m.height = 6
+	view = m.viewReady()
+	if !strings.Contains(view, "> A\n\n") || strings.Contains(view, "d delete") || !strings.Contains(view, "Enter focus") {
+		t.Fatalf("compact ready footer is not responsive:\n%s", view)
+	}
+	m.mode = modeGraphMap
+	m.mapSelected = "a"
+	view = m.viewGraphMap()
+	if strings.Contains(view, "\n\nh/l parent/child") {
+		t.Fatalf("graph map gained text-screen footer gap:\n%s", view)
+	}
+}
+
+func TestUnicodeWrappingUsesDisplayCellsAndValidUTF8(t *testing.T) {
+	text := "界界界界界 👩🏽‍💻 cafe\u0301 supercalifragilistic"
+	lines := wrapWords(text, 8)
+	if len(lines) < 3 {
+		t.Fatalf("wrapped lines = %#v", lines)
+	}
+	for _, line := range lines {
+		if !utf8.ValidString(line) {
+			t.Fatalf("invalid UTF-8 line %q", line)
+		}
+		if width := displaywidth.String(line); width > 8 {
+			t.Fatalf("line width = %d: %q", width, line)
+		}
+	}
+	truncated := truncateText("界界界界界", 7)
+	if !utf8.ValidString(truncated) || displaywidth.String(truncated) > 7 {
+		t.Fatalf("invalid truncation %q width=%d", truncated, displaywidth.String(truncated))
+	}
+}
+
+func TestSearchAndPromptPageByRenderedViewport(t *testing.T) {
+	g := graph.New()
+	for i := 1; i <= 20; i++ {
+		must(t, g.AddNodeWithID(graph.NodeID(fmt.Sprintf("candidate-%02d", i)), fmt.Sprintf("Candidate %02d", i)))
+	}
+	m := newTestModel(t, g)
+	m.mode, m.height, m.width = modeSearch, 10, 48
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	searched := next.(Model)
+	next, _ = searched.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	searched = next.(Model)
+	if searched.searchCursor <= 1 || searched.searchScroll == 0 {
+		t.Fatalf("search page cursor=%d scroll=%d", searched.searchCursor, searched.searchScroll)
+	}
+
+	m = newTestModel(t, g)
+	m.mode, m.promptAction, m.current = modePrompt, promptAddChild, "candidate-01"
+	m.height, m.width = 12, 48
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	prompted := next.(Model)
+	next, _ = prompted.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	prompted = next.(Model)
+	if prompted.suggestionCursor <= 1 || prompted.promptScroll == 0 {
+		t.Fatalf("prompt page cursor=%d scroll=%d", prompted.suggestionCursor, prompted.promptScroll)
 	}
 }
 
@@ -1397,8 +1498,8 @@ func TestSearchWindowsResultsToTerminalHeight(t *testing.T) {
 
 	m.searchCursor = 14
 	view = m.viewSearch()
-	if !strings.Contains(view, "Search 10-19 of 25") {
-		t.Fatalf("expected centered search window:\n%s", view)
+	if !strings.Contains(view, "Search 6-15 of 25") {
+		t.Fatalf("expected edge-revealed search window:\n%s", view)
 	}
 	if !strings.Contains(view, "Candidate 15") {
 		t.Fatalf("selected search candidate not visible:\n%s", view)
@@ -1642,10 +1743,10 @@ func TestLeavesWindowsItemsToTerminalHeight(t *testing.T) {
 	m.width = 48
 
 	view := m.viewLeaves()
-	if !strings.Contains(view, "Leaves 1-2 of 20") {
+	if !strings.Contains(view, "Leaves 1-6 of 20") {
 		t.Fatalf("expected initial leaves window:\n%s", view)
 	}
-	if strings.Contains(view, "Leaf item 03") {
+	if strings.Contains(view, "Leaf item 07") {
 		t.Fatalf("rendered beyond visible leaves window:\n%s", view)
 	}
 	if lines := strings.Count(view, "\n") + 1; lines > m.height {
@@ -1654,14 +1755,14 @@ func TestLeavesWindowsItemsToTerminalHeight(t *testing.T) {
 
 	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
 	paged := next.(Model)
-	if paged.leavesCursor != 1 {
+	if paged.leavesCursor != 5 {
 		t.Fatalf("leavesCursor after PgDown = %d", paged.leavesCursor)
 	}
 
 	paged.leavesCursor = 12
 	view = paged.viewLeaves()
-	if !strings.Contains(view, "Leaves 12-13 of 20") {
-		t.Fatalf("expected centered leaves window:\n%s", view)
+	if !strings.Contains(view, "Leaves 8-13 of 20") {
+		t.Fatalf("expected edge-revealed leaves window:\n%s", view)
 	}
 	if !strings.Contains(view, "Leaf item 13") {
 		t.Fatalf("selected leaf not visible:\n%s", view)
@@ -1817,8 +1918,8 @@ func TestLinkPromptWindowsMatchesToTerminalHeight(t *testing.T) {
 
 	m.suggestionCursor = 10
 	view = m.viewPrompt()
-	if !strings.Contains(view, "Matches 8-13 of 25") {
-		t.Fatalf("expected centered match window:\n%s", view)
+	if !strings.Contains(view, "Matches 6-11 of 25") {
+		t.Fatalf("expected edge-revealed match window:\n%s", view)
 	}
 	if !strings.Contains(view, "Candidate 11") {
 		t.Fatalf("selected candidate not visible:\n%s", view)

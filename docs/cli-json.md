@@ -1,39 +1,70 @@
 # CLI JSON Output
 
-Status: public interface beginning with dagim 1.1.0
+Status: public interface beginning with dagim 1.4.0
 
 Every scriptable dagim command accepts `--json`. JSON output is intended for
-shell scripts, editor integrations, and agent/tool sessions.
+shell scripts, editor integrations, and agent/tool sessions. Schema version 2
+is a deliberate pre-adoption reset of the earlier schema; there is no schema
+version 1 compatibility mode.
+
+The CLI JSON schema is independent of the on-disk format. Existing
+`# dagim v1` files remain supported.
 
 ## Process Contract
 
-On success:
+Every JSON invocation writes exactly one JSON object followed by a newline.
+Standard error is empty. Successful commands exit zero; failed commands exit
+nonzero after writing a structured failure object to standard output.
 
-- Exit status is zero.
-- Standard output contains exactly one JSON object followed by a newline.
-- Standard error is empty.
+`--help` takes precedence over `--json` and prints human-readable help
+successfully. Human-mode process behavior is unchanged: normal output goes to
+standard output and failures are reported on standard error.
 
-On failure:
+Every JSON response uses this envelope:
 
-- Exit status is nonzero.
-- Standard output is empty.
-- Standard error contains a human-readable diagnostic. Errors are not JSON in
-  schema version 1.
+```json
+{
+  "schema_version": 2,
+  "ok": true,
+  "result": {},
+  "diagnostics": []
+}
+```
 
-Node and edge arrays use the graph's stable file order. Empty arrays are encoded
-as `[]`, not `null`.
+On failure, `ok` is `false`, `result` is `null`, and `diagnostics` contains at
+least one error. Empty collections are encoded as `[]`, not `null`.
 
-## Schema Compatibility
+## Diagnostics
 
-`schema_version` identifies the CLI JSON schema, independently of the
-`# dagim v1` file format.
+A diagnostic is:
 
-Schema version 1 may gain new object fields without a version bump. Consumers
-should ignore fields they do not recognize. Removing or renaming a field,
-changing its JSON type, or changing its documented meaning requires a schema
-version bump.
+```json
+{
+  "code": "unknown_node",
+  "message": "unknown node: missing",
+  "severity": "error",
+  "element": "missing"
+}
+```
 
-## Shared Objects
+`severity` is `error` or `warning`. `line` and `element` are omitted when no
+source line or relevant element is available. Codes and field meanings are
+stable within schema version 2; callers should display `message` but branch on
+`code`.
+
+Stable code families include:
+
+- invocation: `usage`, `unknown_command`, `unknown_state`, `text_required`;
+- nodes: `empty_node_id`, `invalid_node_id`, `empty_node_text`,
+  `duplicate_node`, `unknown_node`;
+- edges and graph validity: `duplicate_edge`, `missing_edge`, `self_edge`,
+  `cycle`, `blocked`;
+- file syntax: `malformed_line`, `parent_before_node`,
+  `complete_before_node`, `invalid_complete`, `invalid_file`;
+- persistence: `file_not_found`, `file_read`, `file_write`, `file_changed`;
+- unexpected implementation failures: `internal_error`.
+
+## Shared Result Objects
 
 A node object has these fields:
 
@@ -48,46 +79,35 @@ A node object has these fields:
 }
 ```
 
-`state` is `complete`, `ready`, or `blocked`. `blocked_by` contains the stable
-IDs of immediate incomplete parents.
+`state` is `complete`, `ready`, or `blocked`. `blocked_by` contains stable IDs
+of immediate incomplete parents in file order.
 
-An edge object is:
+An edge object contains `parent` and `child`. Statistics contain `nodes`,
+`edges`, `complete`, `ready`, `roots`, and `leaves`.
 
-```json
-{
-  "parent": "prepare-ingredients",
-  "child": "cook-dinner"
-}
-```
+## Result Families
 
-Statistics contain `nodes`, `edges`, `complete`, `ready`, `roots`, and `leaves`.
+Read command results:
 
-## Response Families
+- `check`: `ok`, `stats`, `canonical`, and `transitive_edges`;
+- `ready` and `list`: `nodes`;
+- `show`: `node`, `parents`, and `children`.
 
-Read commands:
+Completion mutation results (`complete` and `reopen`) contain `action`,
+`dry_run`, `node`, `changed`, `newly_ready`, `newly_blocked`, and `stats`.
 
-- `check`: `schema_version`, `ok`, `stats`, `canonical`, and
-  `transitive_edges`.
-- `ready` and `list`: `schema_version` and `nodes`.
-- `show`: `schema_version`, `node`, `parents`, and `children`.
+Graph-edit mutation results (`add`, `edit`, `link`, `unlink`, and `delete`)
+contain `action`, `dry_run`, `changed`, `node`, `previous_text`, `edges_added`,
+`edges_removed`, `completion_changed`, `newly_ready`, `newly_blocked`, and
+`stats`.
 
-Completion mutations (`complete` and `reopen`) return:
-
-- `schema_version`, `action`, `dry_run`, and `node`.
-- `changed`: nodes whose completion boolean changed.
-- `newly_ready` and `newly_blocked`: existing nodes whose state changed.
-- `stats`: statistics after the operation, or after the preview for a dry run.
-
-Graph edits (`add`, `edit`, `link`, `unlink`, and `delete`) return:
-
-- `schema_version`, `action`, `dry_run`, and `changed`.
-- `node`: the added, edited, or deleted node; otherwise `null`.
-- `previous_text`: the prior label for `edit`; otherwise `null`.
-- `edges_added` and `edges_removed`.
-- `completion_changed`: nodes reopened to preserve completion validity.
-- `newly_ready` and `newly_blocked`.
-- `stats`: statistics after the operation, or after the preview for a dry run.
-
-State-changing mutation output is written only after a successful atomic save.
+State-changing result output is written only after a successful atomic save.
 No-op output requires no save. Dry-run output describes the validated in-memory
 result without saving it.
+
+## Compatibility
+
+Schema version 2 may gain new object fields without a version bump. Consumers
+must ignore fields they do not recognize. Removing or renaming a field,
+changing its JSON type, changing stream/exit behavior, or changing documented
+meaning requires another schema version bump.

@@ -11,6 +11,7 @@ import (
 
 	"github.com/tunesmith/dagim/internal/dagimfile"
 	"github.com/tunesmith/dagim/internal/graph"
+	domainquery "github.com/tunesmith/dagim/internal/query"
 )
 
 type edgeOutput struct {
@@ -19,7 +20,6 @@ type edgeOutput struct {
 }
 
 type graphEditOutput struct {
-	SchemaVersion     int          `json:"schema_version"`
 	Action            string       `json:"action"`
 	DryRun            bool         `json:"dry_run"`
 	Changed           bool         `json:"changed"`
@@ -58,14 +58,14 @@ func runAddCommand(args []string, stdout, stderr io.Writer) error {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
-		return err
+		return diagnosticError("usage", err.Error(), "add")
 	}
 	if fs.NArg() != 1 {
 		fs.Usage()
-		return fmt.Errorf("add expects exactly one file")
+		return diagnosticError("usage", "add expects exactly one file", "add")
 	}
 	if strings.TrimSpace(*text) == "" {
-		return fmt.Errorf("add requires --text")
+		return diagnosticError("text_required", "add requires --text", "--text")
 	}
 	return addNode(fs.Arg(0), *text, parents, children, *jsonOutput, stdout)
 }
@@ -80,14 +80,14 @@ func runEditCommand(args []string, stdout, stderr io.Writer) error {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
-		return err
+		return diagnosticError("usage", err.Error(), "edit")
 	}
 	if fs.NArg() != 2 {
 		fs.Usage()
-		return fmt.Errorf("edit expects a file and node ID")
+		return diagnosticError("usage", "edit expects a file and node ID", "edit")
 	}
 	if strings.TrimSpace(*text) == "" {
-		return fmt.Errorf("edit requires --text")
+		return diagnosticError("text_required", "edit requires --text", "--text")
 	}
 	return editNode(fs.Arg(0), graph.NodeID(fs.Arg(1)), *text, *jsonOutput, stdout)
 }
@@ -101,11 +101,11 @@ func runLinkCommand(args []string, stdout, stderr io.Writer) error {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
-		return err
+		return diagnosticError("usage", err.Error(), "link")
 	}
 	if fs.NArg() != 3 {
 		fs.Usage()
-		return fmt.Errorf("link expects a file, parent ID, and child ID")
+		return diagnosticError("usage", "link expects a file, parent ID, and child ID", "link")
 	}
 	return editEdge(fs.Arg(0), graph.NodeID(fs.Arg(1)), graph.NodeID(fs.Arg(2)), true, *jsonOutput, stdout)
 }
@@ -119,11 +119,11 @@ func runUnlinkCommand(args []string, stdout, stderr io.Writer) error {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
-		return err
+		return diagnosticError("usage", err.Error(), "unlink")
 	}
 	if fs.NArg() != 3 {
 		fs.Usage()
-		return fmt.Errorf("unlink expects a file, parent ID, and child ID")
+		return diagnosticError("usage", "unlink expects a file, parent ID, and child ID", "unlink")
 	}
 	return editEdge(fs.Arg(0), graph.NodeID(fs.Arg(1)), graph.NodeID(fs.Arg(2)), false, *jsonOutput, stdout)
 }
@@ -138,17 +138,17 @@ func runDeleteCommand(args []string, stdout, stderr io.Writer) error {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
-		return err
+		return diagnosticError("usage", err.Error(), "delete")
 	}
 	if fs.NArg() != 2 {
 		fs.Usage()
-		return fmt.Errorf("delete expects a file and node ID")
+		return diagnosticError("usage", "delete expects a file and node ID", "delete")
 	}
 	return deleteNode(fs.Arg(0), graph.NodeID(fs.Arg(1)), *dryRun, *jsonOutput, stdout)
 }
 
 func addNode(path, text string, parents, children []string, jsonOutput bool, stdout io.Writer) error {
-	g, err := dagimfile.LoadOrEmpty(path)
+	g, existed, err := dagimfile.LoadOrEmptyState(path)
 	if err != nil {
 		return err
 	}
@@ -175,12 +175,16 @@ func addNode(path, text string, parents, children []string, jsonOutput bool, std
 	if err := g.Validate(); err != nil {
 		return err
 	}
-	if err := dagimfile.SaveAtomic(path, g); err != nil {
+	if existed {
+		if err := dagimfile.SaveAtomic(path, g); err != nil {
+			return err
+		}
+	} else if err := dagimfile.CreateAtomic(path, g); err != nil {
 		return err
 	}
 	node, _ := g.Node(id)
 	result := newGraphEditOutput("add", before, g)
-	summary := summarizeNode(g, node)
+	summary := summarizeNode(domainquery.Summarize(g, node))
 	result.Node = &summary
 	result.Changed = true
 	result.EdgesAdded = edges
@@ -195,7 +199,7 @@ func editNode(path string, id graph.NodeID, text string, jsonOutput bool, stdout
 	before := g.Clone()
 	oldNode, ok := g.Node(id)
 	if !ok {
-		return fmt.Errorf("%w: %s", graph.ErrUnknownNode, id)
+		return diagnosticError("unknown_node", fmt.Sprintf("%s: %s", graph.ErrUnknownNode, id), string(id))
 	}
 	if err := g.EditNodeText(id, text); err != nil {
 		return err
@@ -208,7 +212,7 @@ func editNode(path string, id graph.NodeID, text string, jsonOutput bool, stdout
 		}
 	}
 	result := newGraphEditOutput("edit", before, g)
-	summary := summarizeNode(g, node)
+	summary := summarizeNode(domainquery.Summarize(g, node))
 	result.Node = &summary
 	result.PreviousText = &oldNode.Text
 	result.Changed = changed
@@ -221,6 +225,12 @@ func editEdge(path string, parent, child graph.NodeID, add, jsonOutput bool, std
 		return err
 	}
 	before := g.Clone()
+	if err := ensureKnownNode(g, parent); err != nil {
+		return err
+	}
+	if err := ensureKnownNode(g, child); err != nil {
+		return err
+	}
 	edge := edgeOutput{Parent: string(parent), Child: string(child)}
 	action := "unlink"
 	if add {
@@ -255,9 +265,9 @@ func deleteNode(path string, id graph.NodeID, dryRun, jsonOutput bool, stdout io
 	before := g.Clone()
 	node, ok := g.Node(id)
 	if !ok {
-		return fmt.Errorf("%w: %s", graph.ErrUnknownNode, id)
+		return diagnosticError("unknown_node", fmt.Sprintf("%s: %s", graph.ErrUnknownNode, id), string(id))
 	}
-	deleted := summarizeNode(g, node)
+	deleted := summarizeNode(domainquery.Summarize(g, node))
 	edges := make([]edgeOutput, 0)
 	for _, edge := range g.Edges() {
 		if edge.Parent == id || edge.Child == id {
@@ -284,6 +294,12 @@ func deleteNode(path string, id graph.NodeID, dryRun, jsonOutput bool, stdout io
 }
 
 func addEdgeForEditing(g *graph.Graph, parent, child graph.NodeID) error {
+	if err := ensureKnownNode(g, parent); err != nil {
+		return err
+	}
+	if err := ensureKnownNode(g, child); err != nil {
+		return err
+	}
 	if err := g.AddEdge(parent, child); err != nil {
 		return err
 	}
@@ -296,18 +312,24 @@ func addEdgeForEditing(g *graph.Graph, parent, child graph.NodeID) error {
 	return nil
 }
 
+func ensureKnownNode(g *graph.Graph, id graph.NodeID) error {
+	if g.HasNode(id) {
+		return nil
+	}
+	return diagnosticError("unknown_node", fmt.Sprintf("%s: %s", graph.ErrUnknownNode, id), string(id))
+}
+
 func newGraphEditOutput(action string, before, after *graph.Graph) graphEditOutput {
-	transitions := compareGraphStates(before, after)
+	transitions := domainquery.Compare(before, after)
 	return graphEditOutput{
-		SchemaVersion:     outputSchemaVersion,
 		Action:            action,
 		Node:              nil,
 		PreviousText:      nil,
 		EdgesAdded:        make([]edgeOutput, 0),
 		EdgesRemoved:      make([]edgeOutput, 0),
-		CompletionChanged: transitions.CompletionChanged,
-		NewlyReady:        transitions.NewlyReady,
-		NewlyBlocked:      transitions.NewlyBlocked,
+		CompletionChanged: summarizeNodes(transitions.CompletionChanged),
+		NewlyReady:        summarizeNodes(transitions.NewlyReady),
+		NewlyBlocked:      summarizeNodes(transitions.NewlyBlocked),
 		Stats:             makeStatsOutput(after.Stats()),
 	}
 }

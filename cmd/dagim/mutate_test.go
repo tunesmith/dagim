@@ -24,10 +24,8 @@ func TestCompleteCommandSavesAndReportsNewlyReady(t *testing.T) {
 		t.Fatalf("runWithIO complete: %v", err)
 	}
 	var result mutationOutput
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		t.Fatalf("unmarshal complete JSON: %v\n%s", err, stdout.String())
-	}
-	if result.SchemaVersion != 1 || result.Action != "complete" || result.DryRun {
+	decodeJSONResult(t, stdout.Bytes(), &result)
+	if result.Action != "complete" || result.DryRun {
 		t.Fatalf("complete result metadata = %#v", result)
 	}
 	if got, want := outputIDs(result.Changed), []string{"chop-vegetables"}; !reflect.DeepEqual(got, want) {
@@ -62,8 +60,9 @@ func TestCompleteCommandRejectsBlockedNodeWithoutChangingFile(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "blocked by incomplete parents") {
 		t.Fatalf("complete blocked error = %v", err)
 	}
-	if stdout.Len() != 0 {
-		t.Fatalf("complete blocked stdout = %q", stdout.String())
+	var envelope jsonEnvelope
+	if decodeErr := json.Unmarshal(stdout.Bytes(), &envelope); decodeErr != nil || envelope.OK || envelope.Result != nil || len(envelope.Diagnostics) != 1 || envelope.Diagnostics[0].Code != "blocked" {
+		t.Fatalf("complete blocked envelope = %#v, decode error %v", envelope, decodeErr)
 	}
 	if after := readTestFile(t, path); !bytes.Equal(after, before) {
 		t.Fatalf("blocked completion changed the file")
@@ -84,9 +83,7 @@ func TestCompleteCommandIsIdempotent(t *testing.T) {
 		t.Fatalf("second complete: %v", err)
 	}
 	var result mutationOutput
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		t.Fatalf("unmarshal second complete: %v", err)
-	}
+	decodeJSONResult(t, stdout.Bytes(), &result)
 	if len(result.Changed) != 0 || !result.Node.Complete {
 		t.Fatalf("idempotent result = %#v", result)
 	}
@@ -105,9 +102,7 @@ func TestReopenDryRunReportsCascadeWithoutSaving(t *testing.T) {
 		t.Fatalf("runWithIO reopen --dry-run: %v", err)
 	}
 	var result mutationOutput
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		t.Fatalf("unmarshal reopen JSON: %v\n%s", err, stdout.String())
-	}
+	decodeJSONResult(t, stdout.Bytes(), &result)
 	if result.Action != "reopen" || !result.DryRun {
 		t.Fatalf("reopen result metadata = %#v", result)
 	}

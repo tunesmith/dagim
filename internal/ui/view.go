@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/clipperhouse/displaywidth"
 
 	"github.com/tunesmith/dagim/internal/graph"
 )
@@ -172,8 +173,12 @@ func (m Model) viewPrompt() string {
 		results := m.promptMatches()
 		b.WriteString("\n\n")
 		matchTitle := "Matches"
+		body, budget := m.promptRenderedItems()
+		offset := m.promptScroll
 		if len(results) > 0 {
-			start, end := m.promptMatchWindow(len(results))
+			cursor := clampedCursor(m.suggestionCursor, len(results))
+			offset = revealSelection(offset, len(body.lines), body.spans[cursor], budget)
+			start, end := visibleSpanRange(body.spans, offset, budget)
 			matchTitle = fmt.Sprintf("Matches %d-%d of %d", start+1, end, len(results))
 		}
 		b.WriteString(titleStyle.Render(matchTitle))
@@ -187,27 +192,27 @@ func (m Model) viewPrompt() string {
 				b.WriteString(mutedStyle.Render("  no eligible matches; existing links or cycles are hidden"))
 			}
 		} else {
-			start, end := m.promptMatchWindow(len(results))
-			for i := start; i < end; i++ {
-				id := results[i]
-				node, _ := m.g.Node(id)
-				b.WriteString(m.renderSelectableLine(i == m.suggestionCursor, node.Text))
-				b.WriteByte('\n')
-			}
+			b.WriteString(strings.Join(viewportLines(body.lines, offset, budget), "\n"))
+			b.WriteByte('\n')
 			b.WriteString(mutedStyle.Render("Enter links selected match; Ctrl+N creates typed text"))
 		}
 	}
 	b.WriteString("\n\n")
 	b.WriteString(commandStyle.Render("Enter accept    Esc cancel"))
 	if m.promptAction == promptAddParent || m.promptAction == promptAddChild {
-		b.WriteString(commandStyle.Render("    Up/Down select    Ctrl+N create"))
+		b.WriteString(commandStyle.Render("    Up/Down select    PgUp/PgDn page    Ctrl+N create"))
 	}
 	return b.String()
 }
 
 func (m Model) viewSearch() string {
 	results := m.searchResults(m.input.Value())
-	start, end := m.searchResultWindow(len(results))
+	body, budget := m.searchRenderedItems()
+	offset := m.searchScroll
+	if len(results) > 0 {
+		offset = revealSelection(offset, len(body.lines), body.spans[clampedCursor(m.searchCursor, len(results))], budget)
+	}
+	start, end := visibleSpanRange(body.spans, offset, budget)
 	title := "Search"
 	if len(results) > end-start {
 		title = fmt.Sprintf("Search %d-%d of %d", start+1, end, len(results))
@@ -222,28 +227,29 @@ func (m Model) viewSearch() string {
 	if len(results) == 0 {
 		b.WriteString(mutedStyle.Render("  no matches"))
 	} else {
-		for i := start; i < end; i++ {
-			id := results[i]
-			node, _ := m.g.Node(id)
-			b.WriteString(m.renderSelectableLine(i == m.searchCursor, node.Text))
-			b.WriteByte('\n')
-		}
+		b.WriteString(strings.Join(viewportLines(body.lines, offset, budget), "\n"))
 	}
-	b.WriteString("\n")
-	b.WriteString(commandStyle.Render("Enter focus    Up/Down select    Esc cancel"))
+	b.WriteString("\n\n")
+	b.WriteString(commandStyle.Render("Enter focus    Up/Down select    PgUp/PgDn page    Esc cancel"))
 	return b.String()
 }
 
 func (m Model) viewReady() string {
 	items := m.readyItems()
 	cursor := clampedCursor(m.readyCursor, len(items))
-	footer := m.readyFooter()
+	footer := m.responsiveFooter(m.readyFooter(), "j/k move  PgUp/PgDn page  Enter focus  q quit", 2)
 	rendered := make([]string, len(items))
 	for i, item := range items {
 		node, _ := m.g.Node(item.id)
 		rendered[i] = m.renderSelectableNode(i == cursor, node)
 	}
-	start, end := lineWindowForRendered(rendered, cursor, m.listItemLimitForFooter(footer))
+	body := renderedItems(rendered)
+	budget := m.listItemLimitForFooter(footer)
+	offset := m.readyScroll
+	if len(body.spans) > 0 {
+		offset = revealSelection(offset, len(body.lines), body.spans[cursor], budget)
+	}
+	start, end := visibleSpanRange(body.spans, offset, budget)
 	title := "Ready"
 	if m.showCompleted {
 		title = "Ready + Completed"
@@ -261,14 +267,9 @@ func (m Model) viewReady() string {
 			b.WriteString(mutedStyle.Render("  none ready"))
 		}
 	} else {
-		for i := start; i < end; i++ {
-			b.WriteString(rendered[i])
-			b.WriteByte('\n')
-		}
+		b.WriteString(strings.Join(viewportLines(body.lines, offset, budget), "\n"))
 	}
-	if len(items) == 0 {
-		b.WriteByte('\n')
-	}
+	b.WriteString("\n\n")
 	b.WriteString(footer)
 	return b.String()
 }
@@ -276,13 +277,19 @@ func (m Model) viewReady() string {
 func (m Model) viewLeaves() string {
 	leaves := m.visibleLeaves()
 	cursor := clampedCursor(m.leavesCursor, len(leaves))
-	footer := m.leavesFooter()
+	footer := m.responsiveFooter(m.leavesFooter(), "j/k move  PgUp/PgDn page  Enter focus  Esc back", 2)
 	rendered := make([]string, len(leaves))
 	for i, id := range leaves {
 		node, _ := m.g.Node(id)
 		rendered[i] = m.renderSelectableNode(i == cursor, node)
 	}
-	start, end := lineWindowForRendered(rendered, cursor, m.listItemLimitForFooter(footer))
+	body := renderedItems(rendered)
+	budget := m.listItemLimitForFooter(footer)
+	offset := m.leavesScroll
+	if len(body.spans) > 0 {
+		offset = revealSelection(offset, len(body.lines), body.spans[cursor], budget)
+	}
+	start, end := visibleSpanRange(body.spans, offset, budget)
 	title := listTitle("Leaves", start, end, len(leaves))
 	var b strings.Builder
 	b.WriteString(titleStyle.Render(title))
@@ -292,14 +299,9 @@ func (m Model) viewLeaves() string {
 	if len(leaves) == 0 {
 		b.WriteString(mutedStyle.Render("  no leaves"))
 	} else {
-		for i := start; i < end; i++ {
-			b.WriteString(rendered[i])
-			b.WriteByte('\n')
-		}
+		b.WriteString(strings.Join(viewportLines(body.lines, offset, budget), "\n"))
 	}
-	if len(leaves) == 0 {
-		b.WriteByte('\n')
-	}
+	b.WriteString("\n\n")
 	b.WriteString(footer)
 	return b.String()
 }
@@ -533,6 +535,16 @@ func (m Model) leavesFooter() string {
 	})
 }
 
+func (m Model) responsiveFooter(full, compact string, headerLines int) string {
+	if m.height <= 0 {
+		return full
+	}
+	if m.height-headerLines-1-lineCount(full) >= 3 {
+		return full
+	}
+	return commandStyle.Render(truncateText(compact, maxInt(1, m.contentWidth())))
+}
+
 func renderCommandGrid(rows [][]string, width int) string {
 	const gap = 4
 	var cells []string
@@ -565,7 +577,7 @@ func renderCommandGrid(rows [][]string, width int) string {
 			}
 			cell := cells[i]
 			if i < end-1 {
-				line.WriteString(fmt.Sprintf("%-*s", widths[column], cell))
+				line.WriteString(padDisplay(cell, widths[column]))
 			} else {
 				line.WriteString(cell)
 			}
@@ -599,8 +611,8 @@ func commandGridColumnWidths(cells []string, columns int) []int {
 	widths := make([]int, columns)
 	for i, cell := range cells {
 		column := i % columns
-		if len(cell) > widths[column] {
-			widths[column] = len(cell)
+		if width := displaywidth.String(cell); width > widths[column] {
+			widths[column] = width
 		}
 	}
 	return widths
@@ -625,7 +637,7 @@ func (m Model) renderSelectableText(selected bool, text string, complete bool) s
 		prefix = "> "
 		style = selectStyle
 	}
-	return m.renderWrappedWithContinuation(prefix, text, style, len(prefix)+2)
+	return m.renderWrappedWithContinuation(prefix, text, style, displaywidth.String(prefix)+2)
 }
 
 func (m Model) renderSelectableLine(selected bool, text string) string {
@@ -635,7 +647,7 @@ func (m Model) renderSelectableLine(selected bool, text string) string {
 		prefix = "> "
 		style = selectStyle
 	}
-	width := m.contentWidth() - len(prefix)
+	width := m.contentWidth() - displaywidth.String(prefix)
 	if width < 12 {
 		width = 12
 	}
@@ -697,7 +709,7 @@ func (m Model) renderGlobalViewport(body string) string {
 	}
 	footer := m.globalViewportFooter(body)
 	m = m.ensureGlobalSelectionVisibleIn(body, footer)
-	return m.renderScrollable(body, m.viewScroll, footer)
+	return m.renderScrollable(body, m.scrollOffset(), footer)
 }
 
 func (m Model) ensureGlobalSelectionVisible() Model {
@@ -715,60 +727,107 @@ func (m Model) ensureGlobalSelectionVisibleIn(body, footer string) Model {
 	lines := strings.Split(body, "\n")
 	bodyHeight := m.scrollBodyHeight(footer)
 	maxScroll := scrollMaxForLines(lines, bodyHeight)
-	m.viewScroll = clampInt(m.viewScroll, 0, maxScroll)
+	offset := clampInt(m.scrollOffset(), 0, maxScroll)
 	start, end, ok := m.globalSelectionBounds(body)
 	if !ok {
 		return m
 	}
-	if start < m.viewScroll {
-		m.viewScroll = start
+	if start < offset {
+		offset = start
 	}
-	if end > m.viewScroll+bodyHeight {
+	if end > offset+bodyHeight {
 		if end-start <= bodyHeight {
-			m.viewScroll = end - bodyHeight
+			offset = end - bodyHeight
 		} else {
-			m.viewScroll = start
+			offset = start
 		}
 	}
-	m.viewScroll = clampInt(m.viewScroll, 0, maxScroll)
-	return m
+	return m.withScrollOffset(clampInt(offset, 0, maxScroll))
 }
 
-func (m Model) globalSelectionBounds(body string) (int, int, bool) {
-	selectedHeight := 0
+func (m Model) globalSelectionBounds(_ string) (int, int, bool) {
 	switch m.mode {
 	case modeNode:
-		items := m.relationItems()
-		if len(items) == 0 {
-			return 0, 0, false
-		}
-		item := items[clampedCursor(m.cursor, len(items))]
-		node, ok := m.g.Node(item.id)
-		if !ok {
-			return 0, 0, false
-		}
-		selectedHeight = lineCount(m.renderSelectableNode(true, node))
+		return m.nodeSelectionBounds()
 	case modeOrder:
-		if m.order == nil {
-			return 0, 0, false
-		}
-		available := m.order.Available()
-		if len(available) == 0 {
-			return 0, 0, false
-		}
-		node, ok := m.g.Node(available[clampedCursor(m.cursor, len(available))])
-		if !ok {
-			return 0, 0, false
-		}
-		selectedHeight = lineCount(m.renderSelectable(true, node.Text))
+		return m.orderSelectionBounds()
 	default:
 		return 0, 0, false
 	}
-	lines := strings.Split(body, "\n")
-	for i, line := range lines {
-		if strings.HasPrefix(line, "> ") {
-			return i, minInt(len(lines), i+selectedHeight), true
+}
+
+func (m Model) nodeSelectionBounds() (int, int, bool) {
+	items := m.relationItems()
+	if len(items) == 0 {
+		return 0, 0, false
+	}
+	cursor := clampedCursor(m.cursor, len(items))
+	line, itemIndex := 2, 0
+	parents, _ := m.g.ParentsOf(m.current)
+	visibleParents := 0
+	for _, id := range parents {
+		node, _ := m.g.Node(id)
+		if node.Complete && !m.showCompleted {
+			continue
 		}
+		height := lineCount(m.renderSelectableNode(itemIndex == cursor, node))
+		if itemIndex == cursor {
+			return line, line + height, true
+		}
+		line += height
+		itemIndex++
+		visibleParents++
+	}
+	if visibleParents == 0 {
+		line++
+	}
+	line++
+	current, ok := m.g.Node(m.current)
+	if !ok {
+		return 0, 0, false
+	}
+	line += 2 + lineCount(m.renderWrapped("", current.Text, lipgloss.NewStyle())) + 2
+	line += 2
+	children, _ := m.g.ChildrenOf(m.current)
+	for _, id := range children {
+		node, _ := m.g.Node(id)
+		if node.Complete && !m.showCompleted {
+			continue
+		}
+		height := lineCount(m.renderSelectableNode(itemIndex == cursor, node))
+		if itemIndex == cursor {
+			return line, line + height, true
+		}
+		line += height
+		itemIndex++
+	}
+	return 0, 0, false
+}
+
+func (m Model) orderSelectionBounds() (int, int, bool) {
+	if m.order == nil || len(m.order.Available()) == 0 {
+		return 0, 0, false
+	}
+	line := 2
+	output := m.order.Output()
+	if len(output) == 0 {
+		line++
+	} else {
+		for i, id := range output {
+			node, _ := m.g.Node(id)
+			line += lineCount(m.renderWrapped(fmt.Sprintf("%d. ", i+1), node.Text, lipgloss.NewStyle()))
+		}
+	}
+	line += 3
+	available := m.order.Available()
+	cursor := clampedCursor(m.cursor, len(available))
+	for i, id := range available {
+		node, _ := m.g.Node(id)
+		height := lineCount(m.renderSelectable(i == cursor, node.Text))
+		if i == cursor {
+			return line, line + height, true
+		}
+		line += height
 	}
 	return 0, 0, false
 }
@@ -846,7 +905,7 @@ func (m Model) renderScrollable(body string, offset int, footer string) string {
 		b.WriteString(lines[i])
 	}
 	if footer != "" && m.height > bodyHeight {
-		b.WriteByte('\n')
+		b.WriteString("\n\n")
 		b.WriteString(commandStyle.Render(footer))
 	}
 	return b.String()
@@ -877,7 +936,7 @@ func (m Model) scrollBodyHeight(footer string) int {
 	}
 	bodyHeight := m.height
 	if footer != "" {
-		bodyHeight--
+		bodyHeight -= lineCount(footer) + 1
 	}
 	if bodyHeight < 1 {
 		bodyHeight = 1
@@ -928,49 +987,11 @@ func (m Model) listItemLimitForFooter(footer string) int {
 	if m.height <= 0 {
 		return m.listItemLimit()
 	}
-	limit := m.height - 2 - lineCount(footer) // title and rule
+	limit := m.height - 3 - lineCount(footer) // title, rule, blank separator, footer
 	if limit < 1 {
 		return 1
 	}
 	return limit
-}
-
-func lineWindowForRendered(rendered []string, cursor, limit int) (int, int) {
-	heights := make([]int, len(rendered))
-	for i, text := range rendered {
-		heights[i] = lineCount(text)
-	}
-	return lineWindowAroundCursor(heights, cursor, limit)
-}
-
-func lineWindowAroundCursor(heights []int, cursor, limit int) (int, int) {
-	total := len(heights)
-	if total == 0 {
-		return 0, 0
-	}
-	cursor = clampedCursor(cursor, total)
-	if limit < 1 {
-		limit = 1
-	}
-	start := cursor
-	end := cursor + 1
-	used := heights[cursor]
-	beforeTarget := limit / 2
-	beforeUsed := 0
-	for start > 0 && beforeUsed+heights[start-1] <= beforeTarget && used+heights[start-1] <= limit {
-		start--
-		beforeUsed += heights[start]
-		used += heights[start]
-	}
-	for end < total && used+heights[end] <= limit {
-		used += heights[end]
-		end++
-	}
-	for start > 0 && used+heights[start-1] <= limit {
-		start--
-		used += heights[start]
-	}
-	return start, end
 }
 
 func lineCount(text string) int {
@@ -992,11 +1013,11 @@ func leftMarginForTerminal(width int) int {
 }
 
 func (m Model) renderWrapped(prefix, text string, style lipgloss.Style) string {
-	return m.renderWrappedWithContinuation(prefix, text, style, len(prefix))
+	return m.renderWrappedWithContinuation(prefix, text, style, displaywidth.String(prefix))
 }
 
 func (m Model) renderWrappedWithContinuation(prefix, text string, style lipgloss.Style, continuationIndent int) string {
-	width := m.contentWidth() - len(prefix)
+	width := m.contentWidth() - displaywidth.String(prefix)
 	if width < 12 {
 		width = 12
 	}
@@ -1026,25 +1047,21 @@ func wrapWords(text string, width int) []string {
 	var line strings.Builder
 	for _, word := range words {
 		if line.Len() == 0 {
-			for len(word) > width {
-				lines = append(lines, word[:width])
-				word = word[width:]
-			}
-			line.WriteString(word)
+			parts := splitDisplayWord(word, width)
+			lines = append(lines, parts[:len(parts)-1]...)
+			line.WriteString(parts[len(parts)-1])
 			continue
 		}
-		if line.Len()+1+len(word) <= width {
+		if displaywidth.String(line.String())+1+displaywidth.String(word) <= width {
 			line.WriteByte(' ')
 			line.WriteString(word)
 			continue
 		}
 		lines = append(lines, line.String())
 		line.Reset()
-		for len(word) > width {
-			lines = append(lines, word[:width])
-			word = word[width:]
-		}
-		line.WriteString(word)
+		parts := splitDisplayWord(word, width)
+		lines = append(lines, parts[:len(parts)-1]...)
+		line.WriteString(parts[len(parts)-1])
 	}
 	if line.Len() > 0 {
 		lines = append(lines, line.String())
@@ -1056,12 +1073,39 @@ func truncateText(text string, width int) string {
 	if width <= 0 {
 		return ""
 	}
-	runes := []rune(text)
-	if len(runes) <= width {
+	if displaywidth.String(text) <= width {
 		return text
 	}
-	if width <= 3 {
-		return string(runes[:width])
+	return displaywidth.TruncateString(text, width, "...")
+}
+
+func splitDisplayWord(word string, width int) []string {
+	if width < 1 {
+		width = 1
 	}
-	return string(runes[:width-3]) + "..."
+	parts := make([]string, 0, maxInt(1, displaywidth.String(word)/width))
+	var current strings.Builder
+	currentWidth := 0
+	graphemes := displaywidth.StringGraphemes(word)
+	for graphemes.Next() {
+		value, valueWidth := graphemes.Value(), graphemes.Width()
+		if current.Len() > 0 && currentWidth+valueWidth > width {
+			parts = append(parts, current.String())
+			current.Reset()
+			currentWidth = 0
+		}
+		current.WriteString(value)
+		currentWidth += valueWidth
+	}
+	if current.Len() > 0 || len(parts) == 0 {
+		parts = append(parts, current.String())
+	}
+	return parts
+}
+
+func padDisplay(value string, width int) string {
+	if missing := width - displaywidth.String(value); missing > 0 {
+		return value + strings.Repeat(" ", missing)
+	}
+	return value
 }
