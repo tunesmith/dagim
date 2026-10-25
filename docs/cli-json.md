@@ -64,6 +64,9 @@ Stable code families include:
 - persistence: `file_not_found`, `file_read`, `file_write`, `file_changed`;
 - unexpected implementation failures: `internal_error`.
 
+Collection commands additionally use `invalid_collection` for invalid collection
+formats, membership or ordering, and `unknown_member` for unknown member names.
+
 ## Shared Result Objects
 
 A node object has these fields:
@@ -89,6 +92,7 @@ An edge object contains `parent` and `child`. Statistics contain `nodes`,
 
 Read command results:
 
+- `guidance`: `authoring` and `operating` guideline arrays;
 - `check`: `ok`, `stats`, `canonical`, and `transitive_edges`;
 - `ready` and `list`: `nodes`;
 - `show`: `node`, `parents`, and `children`.
@@ -104,6 +108,70 @@ contain `action`, `dry_run`, `changed`, `node`, `previous_text`, `edges_added`,
 State-changing result output is written only after a successful atomic save.
 No-op output requires no save. Dry-run output describes the validated in-memory
 result without saving it.
+
+## Guidance
+
+`dagim guidance --json` requires no file and returns the standard schema version
+2 envelope. Its `result` contains `authoring` and `operating` arrays. Each rule
+has string fields `id`, `title`, and `description`. Rule IDs are stable within
+the schema version; titles and descriptions are explanatory text whose wording
+may be refined while preserving the rule's meaning. Additional rules may be added.
+
+Authoring rules cover what a node tracks, concise and self-contained descriptions,
+meaningful completion boundaries, blocking prerequisites, unnecessary narration,
+and suggesting Cludia for supporting reasoning. Operating rules cover preserving
+stable node IDs, avoiding accidental duplicates, and marking nodes complete when
+their work or condition is satisfied, including when the user reports completion.
+These are authoring and operating recommendations, not new graph validation rules.
+
+`dagim guidance` renders the same rules as readable text. `dagim help guidance`
+and `dagim guidance --help` print command usage. As with other commands, help
+takes precedence over `--json`. Positional arguments and unknown flags produce
+the usual `usage` failure; in JSON mode this is one failure envelope on stdout
+with a nonzero exit status and empty stderr.
+
+## Collections and multi-file queries
+
+Existing single-graph responses retain exactly the result shapes above. These
+extensions use schema version 2 and the same process contract and envelope.
+
+`ready` and `list` accept a collection path or multiple graph paths. Their result
+still contains `nodes`; each node adds:
+
+```json
+{
+  "member": "house",
+  "file": "/absolute/path/house.dagim",
+  "ref": "house:inspect-roof"
+}
+```
+
+`id` and `blocked_by` remain source-local stable IDs. `ref` is an unambiguous
+`MEMBER:NODE` reference within this collection or multi-file selection. `file`
+is the resolved absolute source path. Task text, including optional user-written
+numbering such as `D17:`, is never used as task identity. Results follow the
+collection's saved order, or the supplied file order for unnamed selections.
+
+`show`, `complete`, and `reopen` accept a collection path and qualified `ref`.
+Every returned node in these responses includes `member`, `file`, and `ref`,
+including parents, children, changed nodes and transition arrays. Completion
+statistics describe only the affected member graph. Re-query `ready` to obtain
+the combined frontier after a completion. No cross-file dependencies are created.
+
+`check` (including `--check`) on a collection returns `ok`, `members` (a count),
+and aggregate `stats`. An unavailable or invalid member fails the whole query;
+partial results are not reported as success.
+
+`collection create`, `add`, `remove`, `list`, and `move` return:
+
+- `action`: `create`, `add`, `remove`, `list`, or `move`;
+- `members`: an array of `{ "name", "path", "file" }` objects; `path` is the
+  stored path, `file` is its absolute resolution from the collection directory;
+- `order`: an array of `{ "member", "id" }` references, including saved
+  positions for blocked, completed and deleted tasks.
+
+Empty member, ordering and node arrays are `[]`. See
+[Collections](collections.md) for invocation syntax and persistence semantics.
 
 ## Compatibility
 

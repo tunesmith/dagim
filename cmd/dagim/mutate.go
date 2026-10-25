@@ -61,6 +61,13 @@ func runReopenCommand(args []string, stdout, stderr io.Writer) error {
 }
 
 func mutateCompletion(path string, id graph.NodeID, action string, dryRun, jsonOutput bool, stdout io.Writer) error {
+	isCollection, err := dagimfile.PathIsCollection(path)
+	if err != nil {
+		return err
+	}
+	if isCollection {
+		return mutateCollectionCompletion(path, id, action, dryRun, jsonOutput, stdout)
+	}
 	g, err := dagimfile.Load(path)
 	if err != nil {
 		return err
@@ -162,9 +169,11 @@ func writeMutationNodes(w io.Writer, label string, nodes []nodeOutput) {
 func writeCompleteUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: dagim complete [--json] FILE NODE")
 	fmt.Fprintln(w, "Mark a ready node complete and report newly ready nodes.")
+	fmt.Fprintln(w, "For a collection, use MEMBER:NODE; only that member graph is saved.")
 }
 
 func writeReopenUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: dagim reopen [--dry-run] [--json] FILE NODE")
 	fmt.Fprintln(w, "Mark a node and its completed descendants incomplete.")
+	fmt.Fprintln(w, "For a collection, use MEMBER:NODE; only that member graph is saved.")
 }

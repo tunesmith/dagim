@@ -57,6 +57,9 @@ type CheckResult struct {
 }
 
 func Parse(input string) (*graph.Graph, error) {
+	if IsCollection(input) {
+		return nil, diagnostic.NewError("invalid_file", "this is a collection, not a graph; use a member's source file for graph edits", "")
+	}
 	g := graph.New()
 	type parentRef struct {
 		child  graph.NodeID

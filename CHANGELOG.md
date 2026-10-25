@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.5.0 (2026-10-25)
+
+### Added
+
+- Named collections combine ready tasks from independent graph files, with
+  persistent cross-file ordering, source labels, filtering, task inspection,
+  and direct completion and reopening in the combined TUI.
+- Collection membership and ordering commands support CLI and JSON access.
+  Collection queries and mutations use qualified `MEMBER:NODE` references;
+  dependencies and task state remain in each source graph.
+- Collections and member files reload automatically after external changes.
+  Missing or invalid members are reported, and stale saves are rejected.
+- `ready` and `list` accept multiple graph paths for read-only combined queries.
+- `dagim guidance` and `dagim guidance --json` expose authoring and agent
+  operating guidelines, including stable-ID preservation, avoiding accidental
+  duplicates, and completing work when its condition is satisfied.
+
+### Compatibility
+
+- Existing single-graph files, TUI behavior, and JSON result shapes remain
+  compatible. The graph format remains `# dagim v1` and CLI JSON remains schema 2.
+- Collections use a separate `# dagim collection v1` header. Filenames and
+  extensions are unrestricted; empty or nonexistent files still start graphs
+  through `dagim FILE`. Collection creation is explicit.
+
 ## 1.4.0 (2026-08-29)
 
 ### Added
