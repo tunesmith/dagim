@@ -164,6 +164,56 @@ installing the binary:
 go run ./cmd/dagim ready examples/gumbo.dagim
 ```
 
+Print the authoring and agent operating guidelines directly from the CLI:
+
+```sh
+dagim guidance
+dagim guidance --json
+```
+
+The guidance covers concise, self-contained node text, investigations and
+completion conditions, blocking prerequisites, and optional use of the `cludia`
+CLI for supporting reasoning. Agent operating guidelines cover stable-ID
+preservation, inspecting existing nodes to avoid accidental duplicates, and
+marking work complete when its condition is satisfied, including when the user
+reports completion. The command opens no file and is also listed in `--help`.
+
+## Collections
+
+A collection provides one freely ordered ready view across independent graph
+files. Completing a task saves only its source graph, then refreshes the view.
+Dependencies never cross files, and each graph's own ordering stays independent.
+
+```sh
+# Use any filename or extension; the collection header identifies its type
+dagim collection create daily
+dagim collection add daily house.dagim --as house
+dagim collection add daily work.dagim --as work
+dagim daily
+```
+
+In the combined TUI, `Space` completes the selected task, `J`/`K` saves its
+combined position, `v` includes completed tasks (which `Space` can reopen),
+`/` filters tasks, and `Enter` inspects a task. Changes from other windows or
+CLI sessions reload automatically. Use an individual graph's TUI for graph edits.
+
+Collections also support CLI and agent access:
+
+```sh
+dagim ready daily --json
+dagim complete daily house:inspect-roof --json
+dagim collection move daily house:inspect-roof --before work:review-parser --json
+dagim collection list daily --json
+dagim collection remove daily work --json
+```
+
+Removing a member leaves its graph untouched. Member names qualify stable node
+IDs, so IDs and user-written labels such as `D17:` can repeat across files.
+Single-graph commands and JSON output remain unchanged. For an unnamed read-only
+selection, `ready` and `list` also accept multiple graph paths.
+
+See [Collections](docs/collections.md) for format, ordering, and CLI details.
+
 ## File Format
 
 dagim files are source-readable UTF-8 text with stable IDs and useful diffs:

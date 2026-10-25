@@ -10,6 +10,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/tunesmith/dagim/internal/collection"
 	"github.com/tunesmith/dagim/internal/dagimfile"
 	"github.com/tunesmith/dagim/internal/graph"
 	domainquery "github.com/tunesmith/dagim/internal/query"
@@ -87,9 +88,12 @@ func runReadyCommand(args []string, stdout, stderr io.Writer) error {
 		}
 		return diagnosticError("usage", err.Error(), "ready")
 	}
-	if fs.NArg() != 1 {
+	if fs.NArg() < 1 {
 		fs.Usage()
-		return diagnosticError("usage", "ready expects exactly one file", "ready")
+		return diagnosticError("usage", "ready expects at least one file", "ready")
+	}
+	if fs.NArg() > 1 {
+		return writeMultiFileNodes(fs.Args(), domainquery.FilterReady, *jsonOutput, stdout)
 	}
 	return writeNodeList(fs.Arg(0), "ready", *jsonOutput, stdout)
 }
@@ -106,13 +110,16 @@ func runListCommand(args []string, stdout, stderr io.Writer) error {
 		}
 		return diagnosticError("usage", err.Error(), "list")
 	}
-	if fs.NArg() != 1 {
+	if fs.NArg() < 1 {
 		fs.Usage()
-		return diagnosticError("usage", "list expects exactly one file", "list")
+		return diagnosticError("usage", "list expects at least one file", "list")
 	}
 	filter := domainquery.Filter(*state)
 	if !domainquery.ValidFilter(filter) {
 		return diagnosticError("unknown_state", fmt.Sprintf("unknown state %q; want all, ready, blocked, complete, or incomplete", *state), *state)
+	}
+	if fs.NArg() > 1 {
+		return writeMultiFileNodes(fs.Args(), filter, *jsonOutput, stdout)
 	}
 	return writeNodeList(fs.Arg(0), filter, *jsonOutput, stdout)
 }
@@ -133,6 +140,13 @@ func runShowCommand(args []string, stdout, stderr io.Writer) error {
 		return diagnosticError("usage", "show expects a file and node ID", "show")
 	}
 
+	isCollection, err := dagimfile.PathIsCollection(fs.Arg(0))
+	if err != nil {
+		return err
+	}
+	if isCollection {
+		return showCollectionNode(fs.Arg(0), fs.Arg(1), *jsonOutput, stdout)
+	}
 	g, err := dagimfile.Load(fs.Arg(0))
 	if err != nil {
 		return err
@@ -164,6 +178,10 @@ func runHelpCommand(args []string, stdout io.Writer) error {
 		return diagnosticError("usage", "help expects at most one command", "help")
 	}
 	switch args[0] {
+	case "guidance":
+		writeGuidanceUsage(stdout)
+	case "collection":
+		writeCollectionUsage(stdout)
 	case "check":
 		writeCheckUsage(stdout)
 	case "ready":
@@ -193,6 +211,17 @@ func runHelpCommand(args []string, stdout io.Writer) error {
 }
 
 func writeNodeList(path string, filter domainquery.Filter, jsonOutput bool, stdout io.Writer) error {
+	isCollection, err := dagimfile.PathIsCollection(path)
+	if err != nil {
+		return err
+	}
+	if isCollection {
+		s, err := collection.LoadSnapshot(path)
+		if err != nil {
+			return err
+		}
+		return writeCollectionNodes(s, filter, jsonOutput, stdout)
+	}
 	g, err := dagimfile.Load(path)
 	if err != nil {
 		return err
@@ -313,20 +342,21 @@ func flagsFirst(args []string, valueFlags map[string]bool) []string {
 
 func writeCheckUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: dagim check [--json] FILE")
-	fmt.Fprintln(w, "Parse and validate a graph without opening the TUI.")
+	fmt.Fprintln(w, "Validate a graph or collection without opening the TUI.")
 }
 
 func writeReadyUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: dagim ready [--json] FILE")
+	fmt.Fprintln(w, "Usage: dagim ready [--json] FILE [FILE...]")
 	fmt.Fprintln(w, "List incomplete nodes whose parents are complete.")
 }
 
 func writeListUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: dagim list [--state STATE] [--json] FILE")
+	fmt.Fprintln(w, "Usage: dagim list [--state STATE] [--json] FILE [FILE...]")
 	fmt.Fprintln(w, "List nodes, optionally filtered by all, ready, blocked, complete, or incomplete.")
 }
 
 func writeShowUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: dagim show [--json] FILE NODE")
 	fmt.Fprintln(w, "Show a node with its state, blockers, parents, and children.")
+	fmt.Fprintln(w, "For a collection, use MEMBER:NODE as the node reference.")
 }

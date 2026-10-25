@@ -49,8 +49,12 @@ func runWithIO(args []string, stdout, stderr io.Writer) error {
 func dispatch(args []string, stdout, stderr io.Writer) error {
 	if len(args) > 0 {
 		switch args[0] {
+		case "guidance":
+			return runGuidanceCommand(args[1:], stdout, stderr)
 		case "check":
 			return runCheckCommand(args[1:], stdout, stderr)
+		case "collection":
+			return runCollectionCommand(args[1:], stdout, stderr)
 		case "ready":
 			return runReadyCommand(args[1:], stdout, stderr)
 		case "list":
@@ -113,6 +117,8 @@ func commandValueFlags(args []string) map[string]bool {
 		return nil
 	}
 	switch args[0] {
+	case "collection":
+		return map[string]bool{"as": true, "before": true, "after": true}
 	case "add":
 		return map[string]bool{"text": true, "parent": true, "child": true}
 	case "edit":
@@ -157,6 +163,11 @@ func runLegacy(args []string, stdout, stderr io.Writer) error {
 	if *check {
 		return runCheckTo(path, *jsonOutput, stdout)
 	}
+	if isCollection, err := dagimfile.PathIsCollection(path); err == nil && isCollection {
+		return ui.RunCollection(path)
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 	g, err := dagimfile.LoadOrEmpty(path)
 	if err != nil {
 		return err
@@ -172,6 +183,9 @@ func runCheckTo(path string, jsonOutput bool, stdout io.Writer) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
+	}
+	if dagimfile.IsCollection(string(data)) {
+		return checkCollection(path, jsonOutput, stdout)
 	}
 	result, err := dagimfile.Check(string(data))
 	if err != nil {
@@ -203,8 +217,8 @@ func writeTopLevelUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  dagim FILE")
 	fmt.Fprintln(w, "  dagim check [--json] FILE")
-	fmt.Fprintln(w, "  dagim ready [--json] FILE")
-	fmt.Fprintln(w, "  dagim list [--state STATE] [--json] FILE")
+	fmt.Fprintln(w, "  dagim ready [--json] FILE [FILE...]")
+	fmt.Fprintln(w, "  dagim list [--state STATE] [--json] FILE [FILE...]")
 	fmt.Fprintln(w, "  dagim show [--json] FILE NODE")
 	fmt.Fprintln(w, "  dagim complete [--json] FILE NODE")
 	fmt.Fprintln(w, "  dagim reopen [--dry-run] [--json] FILE NODE")
@@ -215,8 +229,12 @@ func writeTopLevelUsage(w io.Writer) {
 	fmt.Fprintln(w, "  dagim delete [--dry-run] [--json] FILE NODE")
 	fmt.Fprintln(w, "  dagim --check [--json] FILE")
 	fmt.Fprintln(w, "  dagim --version")
+	fmt.Fprintln(w, "  dagim guidance [--json]")
+	fmt.Fprintln(w, "  dagim collection COMMAND ... (see 'dagim help collection')")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Run 'dagim help COMMAND' for command details.")
+	fmt.Fprintln(w, "Run 'dagim guidance' for node-authoring and agent operating guidelines.")
+	fmt.Fprintln(w, "FILE may be a graph or a collection. ready/list also accept multiple graph files.")
 }
 
 func versionLine() string {
