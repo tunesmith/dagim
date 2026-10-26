@@ -194,8 +194,11 @@ dagim daily
 
 In the combined TUI, `Space` completes the selected task, `J`/`K` saves its
 combined position, `v` includes completed tasks (which `Space` can reopen),
-`/` filters tasks, and `Enter` inspects a task. Changes from other windows or
-CLI sessions reload automatically. Use an individual graph's TUI for graph edits.
+and `/` filters tasks. `Enter` focuses a task, where you can select and follow
+its parents or children, including blocked tasks. `Space` completes or reopens
+the focused task, `Esc` retraces navigation, and `r` returns to the combined
+ready list. Changes from other windows or CLI sessions reload automatically.
+Use an individual graph's TUI for graph edits.
 
 Collections also support CLI and agent access:
 

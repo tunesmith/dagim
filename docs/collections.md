@@ -39,8 +39,26 @@ The creation and membership commands also accept `--json`.
 - `v`: include completed tasks. `Space` on a completed task reopens it and its
   completed descendants, within its source graph.
 - `/`: filter by member name, task text, or stable node ID. `Esc` clears the filter.
-- `Enter`: inspect the task, its source path, parents, and children.
-- `?`: help. `q`: quit. Within help or inspection, `Esc`/`q` returns to the list.
+- `Enter`: focus a task and navigate its parents and children.
+- `?`: help. `q`: quit from the ready list.
+
+In node view, `j`/`k` selects a parent or child, and `Enter` follows it, including
+blocked tasks that are not in the ready list. Each related task shows whether it
+is ready, blocked, or complete. A blocked focus also lists its remaining blockers.
+Completed relations are hidden until `v` is enabled, matching the ready list's
+completed-node toggle. The focused node stays open when its completion changes.
+
+`Space` completes or reopens the focused node in its source graph. Completing
+a blocked task is rejected until all its parents are complete; reopening still
+cascades through completed descendants. `Esc` or `Backspace` retraces navigation,
+restoring the previous relation selection. `r` or `q` returns directly to the
+combined ready list. `PgUp`/`PgDn` and `Home`/`End` navigate relations; help can
+be opened with `?` and closed without leaving the focused node.
+
+Navigation preserves qualified identity and selection across external changes.
+If a focused node or its member is removed, navigation returns to a surviving
+previous node or the ready list. Unavailable or invalid member files retain the
+last valid view with mutations disabled until the problem is repaired.
 
 Every row identifies its member. User-written `D17:` labels and stable node IDs
 may repeat across members. An individual graph's full TUI continues to work as
