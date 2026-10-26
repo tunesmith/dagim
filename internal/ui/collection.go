@@ -25,6 +25,9 @@ type CollectionModel struct {
 	input                                  textinput.Model
 	message                                string
 	reloadError                            error
+	current                                collection.Ref
+	relationCursor, relationScroll         int
+	navigation                             []collectionNavigationFrame
 }
 
 func NewCollection(path string) (CollectionModel, error) {
@@ -48,6 +51,7 @@ func RunCollection(path string) error {
 func (m CollectionModel) Init() tea.Cmd { return scheduleDiskCheck() }
 
 func (m CollectionModel) refresh() CollectionModel {
+	selectedRelation, hadRelation := m.selectedRelation()
 	var selected collection.Ref
 	if len(m.items) > 0 {
 		selected = m.items[clampedCursor(m.cursor, len(m.items))].Ref
@@ -73,6 +77,23 @@ func (m CollectionModel) refresh() CollectionModel {
 		if item.Ref == selected {
 			m.cursor = i
 			break
+		}
+	}
+	if m.detail {
+		if _, err := s.Lookup(m.current); err != nil {
+			m = m.backNavigation()
+			m.message = "Focused task is no longer available; returned to the previous view"
+		} else {
+			relations := m.relations()
+			m.relationCursor = clampedCursor(m.relationCursor, len(relations))
+			if hadRelation {
+				for i, relation := range relations {
+					if relation.Ref == selectedRelation {
+						m.relationCursor = i
+						break
+					}
+				}
+			}
 		}
 	}
 	return m.ensureVisible()
@@ -109,13 +130,20 @@ func (m CollectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m.refresh(), nil
 		}
-		if m.help || m.detail {
+		m.message = ""
+		wasDetail, oldCurrent := m.detail, m.current
+		m = m.refresh()
+		// A key intended for a removed focus must not mutate a replacement task.
+		if wasDetail && (!m.detail || m.current != oldCurrent) {
+			return m, nil
+		}
+		if m.help {
 			f := m.formatter()
 			body := m.overlayBody()
 			footer := m.overlayFooter()
 			switch msg.String() {
 			case "q", "esc", "?", "enter":
-				m.help, m.detail = false, false
+				m.help = false
 			case "j", "down":
 				m.overlayScroll++
 			case "k", "up":
@@ -132,8 +160,9 @@ func (m CollectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.overlayScroll = clampInt(m.overlayScroll, 0, f.scrollMax(body, footer))
 			return m, nil
 		}
-		m.message = ""
-		m = m.refresh()
+		if m.detail {
+			return m.updateNavigation(msg), nil
+		}
 		switch msg.String() {
 		case "q":
 			return m, tea.Quit
@@ -141,8 +170,9 @@ func (m CollectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.help = true
 			m.overlayScroll = 0
 		case "enter":
-			m.detail = len(m.items) > 0
-			m.overlayScroll = 0
+			if len(m.items) > 0 {
+				m = m.focusNode(m.items[m.cursor].Ref)
+			}
 		case "/":
 			m.searching = true
 			return m, m.input.Focus()
@@ -170,13 +200,7 @@ func (m CollectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.reloadError != nil || len(m.items) == 0 {
 				break
 			}
-			item := m.items[m.cursor]
-			_, _, err := m.snapshot.SetCompletion(item.Ref, item.Summary.Node.Complete, false)
-			if err != nil {
-				m.message = err.Error()
-			} else {
-				m = m.refresh()
-			}
+			m = m.toggleCollectionCompletion(m.items[m.cursor].Ref)
 		case "J", "K":
 			if m.reloadError != nil || len(m.items) == 0 {
 				break
@@ -222,7 +246,7 @@ func (m CollectionModel) footer() string {
 	f := m.formatter()
 	full := f.renderCommandGrid([][]string{
 		{"j/k move", "PgUp/PgDn page", "Space done/undone", "J/K reorder"},
-		{"v completed", "/ filter", "Enter inspect", "? help / q quit"},
+		{"v completed", "/ filter", "Enter focus", "? help / q quit"},
 	})
 	return f.responsiveFooter(full, "Space done  J/K reorder  ? help  q quit", 3)
 }
@@ -253,6 +277,12 @@ func (m CollectionModel) rendered() renderedText {
 }
 
 func (m CollectionModel) ensureVisible() CollectionModel {
+	if m.help {
+		return m
+	}
+	if m.detail {
+		return m.ensureNavigationVisible()
+	}
 	body := m.rendered()
 	if len(body.spans) == 0 {
 		m.scroll = 0
@@ -265,9 +295,12 @@ func (m CollectionModel) ensureVisible() CollectionModel {
 
 func (m CollectionModel) View() string {
 	f := m.formatter()
-	if m.help || m.detail {
+	if m.help {
 		body := f.renderScrollable(m.overlayBody(), m.overlayScroll, m.overlayFooter())
 		return f.fitToTerminal(f.padBlock(body))
+	}
+	if m.detail {
+		return m.viewNavigation()
 	}
 	title := "Ready"
 	if m.showCompleted {
@@ -310,29 +343,7 @@ func (m CollectionModel) overlayBody() string {
 	var lines []string
 	switch {
 	case m.help:
-		lines = []string{"Collection commands", "", "j/k or arrows: select task", "PgUp/PgDn, Home/End: navigate", "Space: complete selected task (or reopen a completed task)", "J/K: reorder across files; saved in the collection", "v: show/hide completed tasks", "/: filter by member, task text, or node ID; Esc clears", "Enter: inspect task and dependencies", "q: quit", "", "Membership: dagim collection add/remove/list COLLECTION ...", "Members remain independent graphs; dependencies stay within a file.", "", "Esc or q: back"}
-	case m.detail && len(m.items) > 0:
-		item := m.items[clampedCursor(m.cursor, len(m.items))]
-		source := m.snapshot.Sources[item.Member]
-		lines = []string{item.Ref.String(), "", item.Summary.Node.Text, "", "File: " + item.File, "State: " + string(item.Summary.State), "", "Parents"}
-		parents, _ := source.Graph.ParentsOf(item.ID)
-		children, _ := source.Graph.ChildrenOf(item.ID)
-		for _, id := range parents {
-			n, _ := source.Graph.Node(id)
-			lines = append(lines, fmt.Sprintf("  %s: %s", id, n.Text))
-		}
-		if len(parents) == 0 {
-			lines = append(lines, "  none")
-		}
-		lines = append(lines, "", "Children")
-		for _, id := range children {
-			n, _ := source.Graph.Node(id)
-			lines = append(lines, fmt.Sprintf("  %s: %s", id, n.Text))
-		}
-		if len(children) == 0 {
-			lines = append(lines, "  none")
-		}
-		lines = append(lines, "", "Esc or q: back")
+		lines = []string{"Collection commands", "", "j/k or arrows: select task", "PgUp/PgDn, Home/End: navigate", "Space: complete selected task (or reopen a completed task)", "J/K: reorder the ready list across files; saved in the collection", "v: show/hide completed tasks", "/: filter the ready list by member, task text, or node ID; Esc clears", "Enter: focus a task; select and follow its parents or children", "In node view, Space completes/reopens the focused task", "Esc/Backspace: retrace navigation; r/q: return to the ready list", "q: quit from the ready list", "", "Membership: dagim collection add/remove/list COLLECTION ...", "Members remain independent graphs; dependencies stay within a file.", "", "Esc or q: back"}
 	}
 	if m.reloadError != nil {
 		lines = append(lines, "", "Reload failed; actions disabled: "+m.reloadError.Error())

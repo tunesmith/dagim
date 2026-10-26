@@ -217,7 +217,7 @@ func TestCollectionTUIFilteringPagingAndTerminalBounds(t *testing.T) {
 	}
 	m = collectionKey(m, "esc")
 	m = collectionKey(m, "enter")
-	if !strings.Contains(m.overlayBody(), m.items[m.cursor].Ref.String()) {
+	if !strings.Contains(ansi.Strip(m.View()), m.items[m.cursor].Ref.String()) {
 		t.Fatal("detail missing source-qualified identity")
 	}
 }

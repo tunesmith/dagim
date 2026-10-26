@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.6.0 (2026-10-25)
+
+### Added
+
+- Collection node navigation follows parents and children, including blocked
+  tasks, with source-scoped completion, backtracking, remaining blocker details,
+  and focus preservation across external changes.
+
+### Compatibility
+
+- Individual graph behavior, graph and collection file formats, and CLI JSON
+  schema version 2 remain unchanged.
+
 ## 1.5.0 (2026-10-25)
 
 ### Added
