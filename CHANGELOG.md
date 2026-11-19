@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.1 (2026-11-18)
+
+### Fixed
+
+- Current-node text uses the terminal's foreground color. Selection, status,
+  and command colors adapt to light and dark terminal backgrounds in graph and
+  collection views.
+
 ## 1.6.0 (2026-10-25)
 
 ### Added

@@ -18,14 +18,15 @@ const (
 )
 
 var (
-	titleStyle    = lipgloss.NewStyle().Bold(true)
-	mutedStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
-	selectStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("178")).Bold(true)
-	nodeStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Bold(true)
-	completeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Strikethrough(true)
-	readyStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
-	commandStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	titleStyle = lipgloss.NewStyle().Bold(true)
+	// Use the terminal foreground for focused task text even if its background is unknown.
+	nodeStyle     = lipgloss.NewStyle().Bold(true)
+	mutedStyle    = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "241", Dark: "247"})
+	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "124", Dark: "203"})
+	selectStyle   = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "94", Dark: "178"}).Bold(true)
+	completeStyle = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "242", Dark: "248"}).Strikethrough(true)
+	readyStyle    = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "22", Dark: "42"}).Bold(true)
+	commandStyle  = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "240", Dark: "248"})
 )
 
 func (m Model) View() string {
